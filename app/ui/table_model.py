@@ -1,68 +1,158 @@
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from __future__ import annotations
+
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
+from PySide6.QtGui import QBrush, QColor
+
+from app.models import Project
 
 
 class DataTableModel(QAbstractTableModel):
-    def __init__(self, parent=None):
+    dirty_changed = Signal(bool)
+
+    def __init__(self, project: Project | None = None, parent=None) -> None:
         super().__init__(parent)
-        self.columns = ["字段1", "字段2", "字段3"]
-        self.data_rows = [
-            ["", "", ""],
-            ["", "", ""],
-            ["", "", ""],
-        ]
+        self.project = project or Project.create_empty()
+        self.columns = self.project.columns
+        self.rows = self.project.rows
+        self.cells = self.project.cells
+        self.search_matches: list[tuple[int, int]] = []
+        self.current_search_index = -1
+        self._search_match_set: set[tuple[int, int]] = set()
+        self._search_brush = QBrush(QColor("#fff59d"))
+        self._current_search_brush = QBrush(QColor("#ffcc80"))
 
-    def rowCount(self, parent=QModelIndex()) -> int:
-        return len(self.data_rows)
+    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
+        if parent.isValid():
+            return 0
+        return len(self.rows)
 
-    def columnCount(self, parent=QModelIndex()) -> int:
+    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
+        if parent.isValid():
+            return 0
         return len(self.columns)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
         if not index.isValid():
             return None
 
-        row = index.row()
-        col = index.column()
+        position = (index.row(), index.column())
+        if role == Qt.BackgroundRole and position in self._search_match_set:
+            if (
+                self.current_search_index >= 0
+                and self.current_search_index < len(self.search_matches)
+                and position == self.search_matches[self.current_search_index]
+            ):
+                return self._current_search_brush
+            return self._search_brush
 
         if role in (Qt.DisplayRole, Qt.EditRole):
-            return self.data_rows[row][col]
+            row = self.rows[index.row()]
+            column = self.columns[index.column()]
+            return self.project.get_cell_value(row.id, column.id)
 
         return None
 
-    def setData(self, index, value, role=Qt.EditRole) -> bool:
+    def setData(self, index: QModelIndex, value, role: int = Qt.EditRole) -> bool:
         if not index.isValid() or role != Qt.EditRole:
             return False
 
-        row = index.row()
-        col = index.column()
-        self.data_rows[row][col] = str(value)
+        row = self.rows[index.row()]
+        column = self.columns[index.column()]
+        self.project.set_cell_value(row.id, column.id, "" if value is None else str(value))
         self.dataChanged.emit(index, index, [Qt.DisplayRole, Qt.EditRole])
+        self.mark_dirty()
         return True
 
-    def flags(self, index):
+    def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         if not index.isValid():
-            return Qt.NoItemFlags
-        return Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
+            return Qt.ItemFlag.NoItemFlags
+        return (
+            Qt.ItemFlag.ItemIsSelectable
+            | Qt.ItemFlag.ItemIsEnabled
+            | Qt.ItemFlag.ItemIsEditable
+        )
 
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
         if role != Qt.DisplayRole:
             return None
 
-        if orientation == Qt.Horizontal:
-            return self.columns[section]
+        if orientation == Qt.Orientation.Horizontal:
+            return self.columns[section].name
 
         return str(section + 1)
 
-    def add_empty_row(self):
-        row_index = len(self.data_rows)
+    def add_empty_row(self) -> None:
+        row_index = len(self.rows)
         self.beginInsertRows(QModelIndex(), row_index, row_index)
-        self.data_rows.append(["" for _ in self.columns])
+        self.project.append_row()
+        self.rows = self.project.rows
+        self.cells = self.project.cells
         self.endInsertRows()
+        self.mark_dirty()
 
-    def add_empty_column(self):
-        col_index = len(self.columns)
-        self.beginInsertColumns(QModelIndex(), col_index, col_index)
-        self.columns.append(f"字段{col_index + 1}")
-        for row in self.data_rows:
-            row.append("")
+    def add_empty_column(self) -> None:
+        column_index = len(self.columns)
+        self.beginInsertColumns(QModelIndex(), column_index, column_index)
+        self.project.append_column()
+        self.columns = self.project.columns
+        self.cells = self.project.cells
         self.endInsertColumns()
+        self.mark_dirty()
+
+    def load_project(self, project: Project) -> None:
+        self.beginResetModel()
+        self.project = project
+        self.columns = project.columns
+        self.rows = project.rows
+        self.cells = project.cells
+        self.search_matches = []
+        self.current_search_index = -1
+        self._search_match_set = set()
+        self.endResetModel()
+        self.dirty_changed.emit(self.project.dirty)
+
+    def mark_dirty(self) -> None:
+        if not self.project.dirty:
+            self.project.dirty = True
+            self.dirty_changed.emit(True)
+
+    def mark_clean(self) -> None:
+        if self.project.dirty:
+            self.project.dirty = False
+            self.dirty_changed.emit(False)
+
+    def set_search_matches(self, matches: list[tuple[int, int]], current_index: int = -1) -> None:
+        affected_positions = set(self.search_matches) | set(matches)
+        self.search_matches = matches
+        self._search_match_set = set(matches)
+        self.current_search_index = current_index if matches else -1
+        self._emit_search_updates(affected_positions)
+
+    def clear_search(self) -> None:
+        self.set_search_matches([], -1)
+
+    def set_current_search_index(self, index: int) -> None:
+        if not self.search_matches:
+            self.current_search_index = -1
+            return
+
+        affected_positions = set()
+        if 0 <= self.current_search_index < len(self.search_matches):
+            affected_positions.add(self.search_matches[self.current_search_index])
+        self.current_search_index = index
+        if 0 <= self.current_search_index < len(self.search_matches):
+            affected_positions.add(self.search_matches[self.current_search_index])
+        self._emit_search_updates(affected_positions)
+
+    def refresh_column(self, column_index: int) -> None:
+        self.headerDataChanged.emit(Qt.Orientation.Horizontal, column_index, column_index)
+        if self.rowCount() == 0:
+            return
+        top_index = self.index(0, column_index)
+        bottom_index = self.index(self.rowCount() - 1, column_index)
+        self.dataChanged.emit(top_index, bottom_index, [Qt.DisplayRole, Qt.EditRole])
+
+    def _emit_search_updates(self, positions: set[tuple[int, int]]) -> None:
+        for row_index, column_index in positions:
+            index = self.index(row_index, column_index)
+            self.dataChanged.emit(index, index, [Qt.BackgroundRole])

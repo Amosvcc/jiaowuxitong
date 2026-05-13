@@ -1,54 +1,427 @@
-from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QVBoxLayout, QWidget
+from __future__ import annotations
 
+from pathlib import Path
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QSizePolicy,
+    QStatusBar,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
+
+from app.services import ColumnService, ImportExportService, ProjectService, SearchService
+from app.ui.delegates import DataColumnDelegate
+from app.ui.dialogs import ColumnSettingsDialog
 from app.ui.table_model import DataTableModel
 from app.ui.table_view import DataTableView
+from app.ui.widgets import SearchBar
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("数据分析软件 V1.0")
-        self.resize(1200, 800)
-
+        self.import_export_service = ImportExportService()
+        self.project_service = ProjectService()
+        self.search_service = SearchService()
+        self.column_service = ColumnService()
         self.table_model = DataTableModel()
-        self.table_view = DataTableView()
+        self.table_view = DataTableView(self)
         self.table_view.setModel(self.table_model)
+        self.column_delegate = DataColumnDelegate(self.table_view)
+        self.table_view.setItemDelegate(self.column_delegate)
 
-        self.setup_ui()
-        self.setup_toolbar()
-        self.setup_statusbar()
+        self.row_count_label = QLabel()
+        self.column_count_label = QLabel()
+        self.current_cell_label = QLabel()
+        self.search_status_label = QLabel()
 
-    def setup_ui(self):
-        central_widget = QWidget()
+        self.resize(1200, 800)
+        self._setup_ui()
+        self._setup_menu_bar()
+        self._setup_toolbar()
+        self._setup_status_bar()
+        self._connect_signals()
+        self._update_status_labels()
+        self._update_window_title()
+
+    def _setup_ui(self) -> None:
+        central_widget = QWidget(self)
         layout = QVBoxLayout(central_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.table_view)
         self.setCentralWidget(central_widget)
 
-    def setup_toolbar(self):
-        toolbar = QToolBar("主工具栏")
-        self.addToolBar(toolbar)
+    def _setup_menu_bar(self) -> None:
+        self.file_menu = self.menuBar().addMenu("文件")
+        self.edit_menu = self.menuBar().addMenu("编辑")
+        self.menuBar().addMenu("帮助")
 
-        action_new = QAction("新建", self)
-        action_import = QAction("导入", self)
-        action_save = QAction("保存", self)
-        action_add_row = QAction("新增行", self)
-        action_add_col = QAction("新增列", self)
-        action_statistics = QAction("统计", self)
+        self.action_new = self._create_action("新建")
+        self.action_open = self._create_action("打开")
+        self.action_import = self._create_action("导入")
+        self.action_save = self._create_action("保存")
+        self.action_save_as = self._create_action("另存为")
+        self.action_export = self._create_action("导出")
+        self.action_column_settings = self._create_action("列设置")
 
-        toolbar.addAction(action_new)
-        toolbar.addAction(action_import)
-        toolbar.addAction(action_save)
+        for action in (
+            self.action_new,
+            self.action_open,
+            self.action_import,
+            self.action_save,
+            self.action_save_as,
+            self.action_export,
+        ):
+            self.file_menu.addAction(action)
+
+        self.edit_menu.addAction(self.action_column_settings)
+
+    def _setup_toolbar(self) -> None:
+        toolbar = QToolBar("主工具栏", self)
+        toolbar.setMovable(False)
+        self.addToolBar(Qt.TopToolBarArea, toolbar)
+
+        self.action_add_row = self._create_action("新增行")
+        self.action_add_column = self._create_action("新增列")
+        self.action_delete = self._create_action("删除", enabled=False)
+        self.action_terminate_row = self._create_action("终止行", enabled=False)
+        self.action_restore_row = self._create_action("恢复行", enabled=False)
+        self.action_statistics = self._create_action("统计", enabled=False)
+        self.search_bar = SearchBar(self)
+
+        for action in (
+            self.action_new,
+            self.action_open,
+            self.action_import,
+            self.action_save,
+            self.action_export,
+        ):
+            toolbar.addAction(action)
+
         toolbar.addSeparator()
-        toolbar.addAction(action_add_row)
-        toolbar.addAction(action_add_col)
+        toolbar.addAction(self.action_add_row)
+        toolbar.addAction(self.action_add_column)
+        toolbar.addAction(self.action_delete)
+
         toolbar.addSeparator()
-        toolbar.addAction(action_statistics)
+        toolbar.addAction(self.action_terminate_row)
+        toolbar.addAction(self.action_restore_row)
 
-        action_add_row.triggered.connect(self.table_model.add_empty_row)
-        action_add_col.triggered.connect(self.table_model.add_empty_column)
+        toolbar.addSeparator()
+        toolbar.addAction(self.action_column_settings)
+        toolbar.addAction(self.action_statistics)
 
-    def setup_statusbar(self):
-        status_bar = QStatusBar()
+        spacer = QWidget(self)
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(spacer)
+        toolbar.addWidget(self.search_bar)
+
+    def _setup_status_bar(self) -> None:
+        status_bar = QStatusBar(self)
         self.setStatusBar(status_bar)
-        status_bar.showMessage("就绪")
+        status_bar.addPermanentWidget(self.row_count_label)
+        status_bar.addPermanentWidget(self.column_count_label)
+        status_bar.addPermanentWidget(self.current_cell_label, 1)
+        status_bar.addPermanentWidget(self.search_status_label)
+
+    def _connect_signals(self) -> None:
+        self.action_new.triggered.connect(self._new_project)
+        self.action_open.triggered.connect(self._open_project)
+        self.action_import.triggered.connect(self._import_file)
+        self.action_save.triggered.connect(self._save_project)
+        self.action_save_as.triggered.connect(self._save_project_as)
+        self.action_export.triggered.connect(self._export_file)
+        self.action_add_row.triggered.connect(self.table_model.add_empty_row)
+        self.action_add_column.triggered.connect(self.table_model.add_empty_column)
+        self.action_add_row.triggered.connect(self._update_status_labels)
+        self.action_add_column.triggered.connect(self._update_status_labels)
+        self.action_column_settings.triggered.connect(self._open_selected_column_settings)
+        self.table_model.dirty_changed.connect(self._on_dirty_changed)
+        self.table_view.selectionModel().currentChanged.connect(self._on_current_changed)
+        self.table_view.horizontalHeader().customContextMenuRequested.connect(
+            self._show_column_header_menu
+        )
+        self.search_bar.search_requested.connect(self._perform_search)
+        self.search_bar.previous_requested.connect(self._go_to_previous_match)
+        self.search_bar.next_requested.connect(self._go_to_next_match)
+        self.search_bar.clear_requested.connect(self._clear_search)
+
+    def _create_action(self, text: str, *, enabled: bool = True) -> QAction:
+        action = QAction(text, self)
+        action.setEnabled(enabled)
+        return action
+
+    def _new_project(self) -> None:
+        if not self._confirm_save_if_needed():
+            return
+
+        project = self.project_service.create_project()
+        self.table_model.load_project(project)
+        self.search_bar.clear()
+        self.search_bar.set_navigation_enabled(False)
+        self._update_status_labels()
+        self._clear_search_status()
+        self._update_window_title()
+        self.statusBar().showMessage("已新建项目", 5000)
+
+    def _open_project(self) -> None:
+        if not self._confirm_save_if_needed():
+            return
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "打开项目",
+            "",
+            "Data Analysis Project (*.dasproj)",
+        )
+        if not file_path:
+            return
+
+        current_project = self.table_model.project
+        try:
+            project = self.project_service.open_project(file_path)
+        except Exception as exc:
+            self.table_model.load_project(current_project)
+            QMessageBox.critical(self, "打开失败", str(exc))
+            return
+
+        self.table_model.load_project(project)
+        self.search_bar.clear()
+        self.search_bar.set_navigation_enabled(False)
+        self._update_status_labels()
+        self._clear_search_status()
+        self._update_window_title()
+        self.statusBar().showMessage(f"打开成功：{Path(project.file_path or file_path).name}", 5000)
+
+    def _save_project(self) -> bool:
+        if self.table_model.project.file_path:
+            return self._save_project_to_path(self.table_model.project.file_path)
+        return self._save_project_as()
+
+    def _save_project_as(self) -> bool:
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "另存为项目",
+            self.table_model.project.file_path or "",
+            "Data Analysis Project (*.dasproj)",
+        )
+        if not file_path:
+            return False
+        return self._save_project_to_path(file_path)
+
+    def _save_project_to_path(self, file_path: str) -> bool:
+        try:
+            saved_path = self.project_service.save_project(self.table_model.project, file_path)
+        except Exception as exc:
+            QMessageBox.critical(self, "保存失败", str(exc))
+            return False
+
+        self.table_model.mark_clean()
+        self._update_window_title()
+        self.statusBar().showMessage(f"保存成功：{Path(saved_path).name}", 5000)
+        return True
+
+    def _import_file(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择导入文件",
+            "",
+            "数据文件 (*.csv *.xlsx);;CSV 文件 (*.csv);;Excel 文件 (*.xlsx)",
+        )
+        if not file_path:
+            return
+
+        try:
+            project = self.import_export_service.import_file(file_path)
+        except Exception as exc:
+            QMessageBox.critical(self, "导入失败", str(exc))
+            return
+
+        project.dirty = True
+        self.table_model.load_project(project)
+        self.search_bar.clear()
+        self.search_bar.set_navigation_enabled(False)
+        self._update_status_labels()
+        self._clear_search_status()
+        self._update_window_title()
+        self.statusBar().showMessage(
+            f"导入成功：{self.table_model.rowCount()} 行，{self.table_model.columnCount()} 列",
+            5000,
+        )
+
+    def _export_file(self) -> None:
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出表格",
+            "",
+            "CSV 文件 (*.csv);;Excel 文件 (*.xlsx)",
+        )
+        if not file_path:
+            return
+
+        if not Path(file_path).suffix:
+            file_path = f"{file_path}.csv"
+
+        try:
+            self.import_export_service.export_file(self.table_model.project, file_path)
+        except Exception as exc:
+            QMessageBox.critical(self, "导出失败", str(exc))
+            return
+
+        self.statusBar().showMessage(f"导出成功：{Path(file_path).name}", 5000)
+
+    def _open_selected_column_settings(self) -> None:
+        self._open_column_settings_for_index(self._selected_column_index())
+
+    def _show_column_header_menu(self, position) -> None:
+        column_index = self.table_view.horizontalHeader().logicalIndexAt(position)
+        if column_index < 0:
+            return
+        global_position = self.table_view.horizontalHeader().mapToGlobal(position)
+        self.table_view.show_header_menu(
+            global_position,
+            lambda: self._open_column_settings_for_index(column_index),
+        )
+
+    def _selected_column_index(self) -> int:
+        current_index = self.table_view.currentIndex()
+        if current_index.isValid():
+            return current_index.column()
+        return 0
+
+    def _open_column_settings_for_index(self, column_index: int) -> None:
+        if column_index < 0 or column_index >= self.table_model.columnCount():
+            return
+
+        while True:
+            column = self.table_model.columns[column_index]
+            dialog = ColumnSettingsDialog(column, self)
+            if dialog.exec() != ColumnSettingsDialog.DialogCode.Accepted:
+                return
+
+            try:
+                self.column_service.update_column(
+                    self.table_model.project,
+                    column_index,
+                    **dialog.get_settings(),
+                )
+            except ValueError as exc:
+                dialog.show_validation_error(str(exc))
+                continue
+
+            self.table_model.refresh_column(column_index)
+            self.table_model.mark_dirty()
+            self._update_window_title()
+            break
+
+    def _perform_search(self, keyword: str | None = None) -> None:
+        search_keyword = self.search_bar.keyword() if keyword is None else keyword
+        matches = self.search_service.search(self.table_model.project, search_keyword)
+        if not matches:
+            self.table_model.clear_search()
+            self.search_bar.set_navigation_enabled(False)
+            if search_keyword.strip():
+                self.search_status_label.setText("未找到匹配项")
+            else:
+                self._clear_search_status()
+            return
+
+        self.table_model.set_search_matches(matches, 0)
+        self.search_bar.set_navigation_enabled(True)
+        self._focus_search_match(0)
+
+    def _go_to_previous_match(self) -> None:
+        if not self.table_model.search_matches:
+            return
+        next_index = (self.table_model.current_search_index - 1) % len(self.table_model.search_matches)
+        self._focus_search_match(next_index)
+
+    def _go_to_next_match(self) -> None:
+        if not self.table_model.search_matches:
+            return
+        next_index = (self.table_model.current_search_index + 1) % len(self.table_model.search_matches)
+        self._focus_search_match(next_index)
+
+    def _focus_search_match(self, match_index: int) -> None:
+        self.table_model.set_current_search_index(match_index)
+        row_index, column_index = self.table_model.search_matches[match_index]
+        model_index = self.table_model.index(row_index, column_index)
+        self.table_view.setCurrentIndex(model_index)
+        self.table_view.scrollTo(model_index, DataTableView.ScrollHint.PositionAtCenter)
+        self._update_search_status()
+
+    def _clear_search(self) -> None:
+        self.table_model.clear_search()
+        self.search_bar.clear()
+        self.search_bar.set_navigation_enabled(False)
+        self._clear_search_status()
+        self.statusBar().showMessage("已清除搜索", 5000)
+
+    def _clear_search_status(self) -> None:
+        self.search_status_label.clear()
+
+    def _update_search_status(self) -> None:
+        if not self.table_model.search_matches:
+            self.search_status_label.setText("未找到匹配项")
+            return
+        self.search_status_label.setText(
+            f"找到 {len(self.table_model.search_matches)} 个匹配项，当前第 {self.table_model.current_search_index + 1} 个"
+        )
+
+    def _confirm_save_if_needed(self) -> bool:
+        if not self.table_model.project.dirty:
+            return True
+
+        result = QMessageBox.question(
+            self,
+            "未保存更改",
+            "当前项目有未保存更改，是否先保存？",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if result == QMessageBox.StandardButton.Save:
+            return self._save_project()
+        if result == QMessageBox.StandardButton.Discard:
+            return True
+        return False
+
+    def _on_dirty_changed(self, _dirty: bool) -> None:
+        self._update_window_title()
+
+    def _on_current_changed(self) -> None:
+        self._update_status_labels()
+
+    def _update_status_labels(self) -> None:
+        row_count = self.table_model.rowCount()
+        column_count = self.table_model.columnCount()
+        self.row_count_label.setText(f"行数：{row_count}")
+        self.column_count_label.setText(f"列数：{column_count}")
+
+        index = self.table_view.currentIndex()
+        if index.isValid():
+            self.current_cell_label.setText(
+                f"当前单元格：第 {index.row() + 1} 行，第 {index.column() + 1} 列"
+            )
+        else:
+            self.current_cell_label.setText("当前单元格：未选中")
+
+    def _update_window_title(self) -> None:
+        project = self.table_model.project
+        project_label = Path(project.file_path).name if project.file_path else project.name
+        dirty_suffix = " *" if project.dirty else ""
+        self.setWindowTitle(f"数据分析软件 V1.0 - {project_label}{dirty_suffix}")
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self._confirm_save_if_needed():
+            event.accept()
+            return
+        event.ignore()
