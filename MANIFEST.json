@@ -1,0 +1,176 @@
+{
+  "package": "data_analysis_app_codex_startup_pack",
+  "description": "数据分析软件 V1.0 Codex 开发准备包",
+  "files": [
+    {
+      "path": ".gitignore",
+      "size": 246,
+      "sha256_12": "7743a14b848b"
+    },
+    {
+      "path": "AGENTS.md",
+      "size": 2689,
+      "sha256_12": "afff89ee37d5"
+    },
+    {
+      "path": "README.md",
+      "size": 1186,
+      "sha256_12": "f5f14938f183"
+    },
+    {
+      "path": "app/__init__.py",
+      "size": 0,
+      "sha256_12": "e3b0c44298fc"
+    },
+    {
+      "path": "app/core/__init__.py",
+      "size": 0,
+      "sha256_12": "e3b0c44298fc"
+    },
+    {
+      "path": "app/io/__init__.py",
+      "size": 0,
+      "sha256_12": "e3b0c44298fc"
+    },
+    {
+      "path": "app/models/__init__.py",
+      "size": 0,
+      "sha256_12": "e3b0c44298fc"
+    },
+    {
+      "path": "app/repositories/__init__.py",
+      "size": 0,
+      "sha256_12": "e3b0c44298fc"
+    },
+    {
+      "path": "app/services/__init__.py",
+      "size": 0,
+      "sha256_12": "e3b0c44298fc"
+    },
+    {
+      "path": "app/ui/__init__.py",
+      "size": 0,
+      "sha256_12": "e3b0c44298fc"
+    },
+    {
+      "path": "app/ui/dialogs/__init__.py",
+      "size": 0,
+      "sha256_12": "e3b0c44298fc"
+    },
+    {
+      "path": "app/ui/main_window.py",
+      "size": 1804,
+      "sha256_12": "1e133f746599"
+    },
+    {
+      "path": "app/ui/table_model.py",
+      "size": 2073,
+      "sha256_12": "2761f595db3d"
+    },
+    {
+      "path": "app/ui/table_view.py",
+      "size": 405,
+      "sha256_12": "77034047d473"
+    },
+    {
+      "path": "app/ui/widgets/__init__.py",
+      "size": 0,
+      "sha256_12": "e3b0c44298fc"
+    },
+    {
+      "path": "docs/Codex任务提示词.md",
+      "size": 6648,
+      "sha256_12": "c326631ca03b"
+    },
+    {
+      "path": "docs/Codex开发流程.md",
+      "size": 1246,
+      "sha256_12": "55d66138cbdd"
+    },
+    {
+      "path": "docs/UI交互说明.md",
+      "size": 1620,
+      "sha256_12": "26e4a16e7918"
+    },
+    {
+      "path": "docs/V1_0_开发任务清单.md",
+      "size": 2193,
+      "sha256_12": "6df5f289a23d"
+    },
+    {
+      "path": "docs/V1_0_验收清单.md",
+      "size": 1788,
+      "sha256_12": "db6159c79f99"
+    },
+    {
+      "path": "docs/代码架构设计.md",
+      "size": 2850,
+      "sha256_12": "c2bd883155b6"
+    },
+    {
+      "path": "docs/功能规格说明书.md",
+      "size": 4511,
+      "sha256_12": "2688ec11a27a"
+    },
+    {
+      "path": "docs/数据库表结构.sql",
+      "size": 1521,
+      "sha256_12": "c207734c749e"
+    },
+    {
+      "path": "docs/项目初始化命令.md",
+      "size": 346,
+      "sha256_12": "136e971ae783"
+    },
+    {
+      "path": "main.py",
+      "size": 276,
+      "sha256_12": "577ea5d6e244"
+    },
+    {
+      "path": "pyproject.toml",
+      "size": 289,
+      "sha256_12": "f58026ac74f6"
+    },
+    {
+      "path": "requirements.txt",
+      "size": 78,
+      "sha256_12": "aafe47f155c5"
+    },
+    {
+      "path": "sample_data/demo.csv",
+      "size": 449,
+      "sha256_12": "9bf42544f34e"
+    },
+    {
+      "path": "sample_data/demo.xlsx",
+      "size": 5675,
+      "sha256_12": "bc801ef98a97"
+    },
+    {
+      "path": "scripts/build_windows.bat",
+      "size": 159,
+      "sha256_12": "e14b0b68d453"
+    },
+    {
+      "path": "scripts/clean.bat",
+      "size": 147,
+      "sha256_12": "a489e1587882"
+    },
+    {
+      "path": "scripts/run_dev.bat",
+      "size": 108,
+      "sha256_12": "6038651d85df"
+    },
+    {
+      "path": "tests/README.md",
+      "size": 190,
+      "sha256_12": "dd9439a838d1"
+    },
+    {
+      "path": "tests/__init__.py",
+      "size": 0,
+      "sha256_12": "e3b0c44298fc"
+    }
+  ]
+}

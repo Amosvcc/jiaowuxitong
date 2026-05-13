@@ -1,0 +1,15 @@
+[project]
+name = "data-analysis-app"
+version = "1.0.0"
+description = "A lightweight Windows desktop data analysis tool."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
