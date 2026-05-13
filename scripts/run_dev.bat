@@ -1,6 +1,12 @@
 @echo off
+setlocal
+
 cd /d %~dp0\..
-if exist .venv\Scripts\activate (
-    call .venv\Scripts\activate
+
+set PYTHON_CMD=python
+if exist .venv\Scripts\python.exe (
+    set PYTHON_CMD=.venv\Scripts\python.exe
 )
-python main.py
+
+%PYTHON_CMD% main.py
+exit /b %errorlevel%

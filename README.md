@@ -1,34 +1,117 @@
 # 数据分析软件 V1.0
 
-一个运行在 Windows 上的轻量级数据分析与数据表管理工具。
+一个面向 Windows 桌面的轻量级结构化数据维护与统计工具，使用 `Python + PySide6 + SQLite + pandas + openpyxl` 开发。
 
-## 功能目标
+## 项目简介
 
-- 类 Excel 表格编辑
-- CSV / Excel 导入导出
-- 顶部搜索框查找数据
-- 每列可配置下拉选项
-- 行终止 / 行冻结
-- 单字段计数统计
-- 统计结果导出
+本项目提供类似 Excel 的表格编辑体验，同时补充项目文件保存、列下拉配置、行终止、全表搜索和字段统计等能力。  
+V1.0 目标是交付一个可直接运行、可打包为绿色版 Windows 程序的单机工具。
 
-## 技术方案
+## 功能列表
 
+- 表格编辑
+- 新增行 / 新增列
+- CSV 导入导出
+- Excel `.xlsx` 导入导出
+- `.dasproj` SQLite 项目保存与打开
+- 顶部搜索与匹配高亮
+- 列设置与下拉选项
+- 行终止 / 恢复
+- 单字段统计
+- 统计结果导出为 CSV / Excel
+
+## 开发环境
+
+- Windows 10 / Windows 11
 - Python 3.11+
-- PySide6
-- SQLite
-- pandas
-- openpyxl
-- PyInstaller
+- 虚拟环境 `venv`
 
-## 快速开始
+## 安装依赖
 
-```bash
+```bat
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+## 运行方式
+
+直接运行：
+
+```bat
 python main.py
 ```
+
+使用脚本运行：
+
+```bat
+scripts\run_dev.bat
+```
+
+## 测试方式
+
+```bat
+pytest
+```
+
+或：
+
+```bat
+.venv\Scripts\python.exe -m pytest
+```
+
+## 打包方式
+
+先清理旧产物：
+
+```bat
+scripts\clean.bat
+```
+
+再执行打包：
+
+```bat
+scripts\build_windows.bat
+```
+
+核心打包命令为：
+
+```bat
+pyinstaller --noconfirm --clean --windowed --name DataAnalysisApp main.py
+```
+
+打包完成后，输出目录为：
+
+```text
+dist\DataAnalysisApp\
+```
+
+其中主程序为：
+
+```text
+dist\DataAnalysisApp\DataAnalysisApp.exe
+```
+
+## 当前版本功能范围
+
+V1.0 当前已完成：
+
+- 表格编辑
+- CSV / Excel 导入导出
+- `.dasproj` 项目保存与打开
+- 搜索
+- 列设置与下拉选项
+- 行终止 / 恢复
+- 字段统计与统计结果导出
+
+V1.0 暂不包含：
+
+- 多用户协作
+- 云同步
+- 图表系统
+- 复杂数据透视表
+- 高级筛选
+- 批量更新界面
 
 ## 目录说明
 
@@ -38,20 +121,8 @@ app/models/        数据模型
 app/services/      业务逻辑
 app/repositories/  SQLite 数据访问
 app/io/            CSV / Excel 导入导出
-app/core/          常量、异常、工具函数
-docs/              产品和开发文档
-sample_data/       测试导入用示例数据
-scripts/           Windows 开发和打包脚本
-tests/             单元测试
+app/core/          通用异常与工具
+docs/              规格、架构与使用文档
+scripts/           Windows 开发与打包脚本
+tests/             测试代码
 ```
-
-## Codex 开发建议
-
-请将每次开发任务拆小，一次只完成一个阶段，例如：
-
-1. 创建项目骨架。
-2. 实现可编辑表格。
-3. 增加 CSV 导入。
-4. 增加 SQLite 保存。
-5. 实现行终止。
-6. 实现字段统计。
