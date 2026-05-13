@@ -20,6 +20,7 @@ class DataTableModel(QAbstractTableModel):
         self._search_match_set: set[tuple[int, int]] = set()
         self._search_brush = QBrush(QColor("#fff59d"))
         self._current_search_brush = QBrush(QColor("#ffcc80"))
+        self._terminated_row_brush = QBrush(QColor("#e0e0e0"))
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         if parent.isValid():
@@ -36,17 +37,20 @@ class DataTableModel(QAbstractTableModel):
             return None
 
         position = (index.row(), index.column())
-        if role == Qt.BackgroundRole and position in self._search_match_set:
-            if (
-                self.current_search_index >= 0
-                and self.current_search_index < len(self.search_matches)
-                and position == self.search_matches[self.current_search_index]
-            ):
-                return self._current_search_brush
-            return self._search_brush
+        row = self.rows[index.row()]
+        if role == Qt.BackgroundRole:
+            if position in self._search_match_set:
+                if (
+                    self.current_search_index >= 0
+                    and self.current_search_index < len(self.search_matches)
+                    and position == self.search_matches[self.current_search_index]
+                ):
+                    return self._current_search_brush
+                return self._search_brush
+            if row.is_terminated:
+                return self._terminated_row_brush
 
         if role in (Qt.DisplayRole, Qt.EditRole):
-            row = self.rows[index.row()]
             column = self.columns[index.column()]
             return self.project.get_cell_value(row.id, column.id)
 
@@ -57,6 +61,9 @@ class DataTableModel(QAbstractTableModel):
             return False
 
         row = self.rows[index.row()]
+        if row.is_terminated:
+            return False
+
         column = self.columns[index.column()]
         self.project.set_cell_value(row.id, column.id, "" if value is None else str(value))
         self.dataChanged.emit(index, index, [Qt.DisplayRole, Qt.EditRole])
@@ -66,11 +73,11 @@ class DataTableModel(QAbstractTableModel):
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         if not index.isValid():
             return Qt.ItemFlag.NoItemFlags
-        return (
-            Qt.ItemFlag.ItemIsSelectable
-            | Qt.ItemFlag.ItemIsEnabled
-            | Qt.ItemFlag.ItemIsEditable
-        )
+        base_flags = Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
+        row = self.rows[index.row()]
+        if row.is_terminated:
+            return base_flags
+        return base_flags | Qt.ItemFlag.ItemIsEditable
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
         if role != Qt.DisplayRole:
@@ -79,7 +86,9 @@ class DataTableModel(QAbstractTableModel):
         if orientation == Qt.Orientation.Horizontal:
             return self.columns[section].name
 
-        return str(section + 1)
+        row = self.rows[section]
+        row_number = section + 1
+        return f"[终止] {row_number}" if row.is_terminated else str(row_number)
 
     def add_empty_row(self) -> None:
         row_index = len(self.rows)
@@ -151,6 +160,20 @@ class DataTableModel(QAbstractTableModel):
         top_index = self.index(0, column_index)
         bottom_index = self.index(self.rowCount() - 1, column_index)
         self.dataChanged.emit(top_index, bottom_index, [Qt.DisplayRole, Qt.EditRole])
+
+    def refresh_rows(self, row_indexes: list[int]) -> None:
+        valid_indexes = sorted({index for index in row_indexes if 0 <= index < self.rowCount()})
+        if not valid_indexes:
+            return
+        self.headerDataChanged.emit(Qt.Orientation.Vertical, valid_indexes[0], valid_indexes[-1])
+        for row_index in valid_indexes:
+            top_index = self.index(row_index, 0)
+            bottom_index = self.index(row_index, max(self.columnCount() - 1, 0))
+            self.dataChanged.emit(
+                top_index,
+                bottom_index,
+                [Qt.DisplayRole, Qt.EditRole, Qt.BackgroundRole],
+            )
 
     def _emit_search_updates(self, positions: set[tuple[int, int]]) -> None:
         for row_index, column_index in positions:

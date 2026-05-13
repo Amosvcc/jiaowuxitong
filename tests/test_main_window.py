@@ -36,14 +36,14 @@ def test_main_window_initial_state() -> None:
         assert window.action_add_row.isEnabled()
         assert window.action_add_column.isEnabled()
         assert window.action_column_settings.isEnabled()
+        assert window.action_terminate_row.isEnabled()
+        assert window.action_restore_row.isEnabled()
+        assert window.action_statistics.isEnabled()
         assert isinstance(window.search_bar, SearchBar)
         assert window.search_bar.search_input.placeholderText() == "搜索..."
         assert not window.search_bar.previous_button.isEnabled()
         assert not window.search_bar.next_button.isEnabled()
         assert not window.action_delete.isEnabled()
-        assert not window.action_terminate_row.isEnabled()
-        assert not window.action_restore_row.isEnabled()
-        assert not window.action_statistics.isEnabled()
     finally:
         window.close()
         app.processEvents()
@@ -63,6 +63,43 @@ def test_main_window_actions_update_model_and_status() -> None:
         assert window.row_count_label.text() == "行数：11"
         assert window.column_count_label.text() == "列数：6"
         assert window.windowTitle().endswith("*")
+    finally:
+        window.table_model.mark_clean()
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_can_terminate_selected_rows() -> None:
+    app = get_qapp()
+    window = MainWindow()
+    window.table_view.selectRow(1)
+
+    try:
+        window._terminate_selected_rows()
+        app.processEvents()
+
+        assert window.table_model.rows[1].is_terminated is True
+        assert window.table_model.project.dirty is True
+    finally:
+        window.table_model.mark_clean()
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_can_restore_selected_rows() -> None:
+    app = get_qapp()
+    window = MainWindow()
+    window.table_model.rows[1].is_terminated = True
+    window.table_model.rows[1].terminated_at = "2026-05-14T10:00:00"
+    window.table_view.selectRow(1)
+
+    try:
+        window._restore_selected_rows()
+        app.processEvents()
+
+        assert window.table_model.rows[1].is_terminated is False
+        assert window.table_model.rows[1].terminated_at is None
+        assert window.table_model.project.dirty is True
     finally:
         window.table_model.mark_clean()
         window.close()
@@ -185,9 +222,7 @@ def test_main_window_clear_search_clears_matches() -> None:
         app.processEvents()
 
 
-def test_main_window_import_failure_keeps_existing_model(
-    monkeypatch, workspace_tmp_path
-) -> None:
+def test_main_window_import_failure_keeps_existing_model(monkeypatch, workspace_tmp_path) -> None:
     app = get_qapp()
     window = MainWindow()
     original_project = window.table_model.project
@@ -284,6 +319,57 @@ def test_main_window_open_failure_keeps_existing_model(monkeypatch, workspace_tm
 
         assert window.table_model.project is original_project
         assert errors == [("打开失败", "打开失败测试")]
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_statistics_action_opens_dialog(monkeypatch) -> None:
+    app = get_qapp()
+    window = MainWindow()
+    opened = {"count": 0, "project": None}
+
+    class FakeDialog:
+        def __init__(self, project, parent=None):
+            opened["count"] += 1
+            opened["project"] = project
+
+        def exec(self):
+            return 0
+
+    monkeypatch.setattr("app.ui.main_window.StatisticsDialog", FakeDialog)
+
+    try:
+        window.action_statistics.trigger()
+        app.processEvents()
+
+        assert opened["count"] == 1
+        assert opened["project"] is window.table_model.project
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_statistics_does_not_change_dirty(monkeypatch) -> None:
+    app = get_qapp()
+    window = MainWindow()
+    window.table_model.mark_clean()
+
+    class FakeDialog:
+        def __init__(self, project, parent=None):
+            self.project = project
+
+        def exec(self):
+            return 0
+
+    monkeypatch.setattr("app.ui.main_window.StatisticsDialog", FakeDialog)
+
+    try:
+        window._open_statistics_dialog()
+        app.processEvents()
+
+        assert window.table_model.project.dirty is False
+        assert not window.windowTitle().endswith("*")
     finally:
         window.close()
         app.processEvents()

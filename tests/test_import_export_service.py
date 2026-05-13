@@ -40,6 +40,18 @@ def test_import_service_exports_excel_in_current_order(workspace_tmp_path) -> No
     assert exported.values.tolist() == [["张三", "进行中"], ["李四", "已完成"]]
 
 
+def test_export_includes_terminated_rows(workspace_tmp_path) -> None:
+    service = ImportExportService()
+    project = service.import_file(_build_csv_file(workspace_tmp_path / "source.csv"))
+    project.rows[1].is_terminated = True
+    export_path = workspace_tmp_path / "terminated.csv"
+
+    service.export_file(project, str(export_path))
+
+    exported = pd.read_csv(export_path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    assert exported.values.tolist() == [["张三", "进行中"], ["李四", "已完成"]]
+
+
 def test_import_service_rejects_unsupported_format(workspace_tmp_path) -> None:
     path = workspace_tmp_path / "unsupported.txt"
     path.write_text("test", encoding="utf-8")

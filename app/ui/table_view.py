@@ -21,6 +21,8 @@ class DataTableView(QTableView):
         horizontal_header.setStretchLastSection(True)
         horizontal_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         horizontal_header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        vertical_header = self.verticalHeader()
+        vertical_header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
     def show_header_menu(self, global_position, column_settings_callback) -> None:
         menu = QMenu(self)
@@ -28,3 +30,18 @@ class DataTableView(QTableView):
         chosen_action = menu.exec(global_position)
         if chosen_action == column_settings_action:
             column_settings_callback()
+
+    def show_row_header_menu(
+        self,
+        global_position,
+        terminate_callback,
+        restore_callback,
+    ) -> None:
+        menu = QMenu(self)
+        terminate_action = menu.addAction("终止此行")
+        restore_action = menu.addAction("恢复此行")
+        chosen_action = menu.exec(global_position)
+        if chosen_action == terminate_action:
+            terminate_callback()
+        if chosen_action == restore_action:
+            restore_callback()

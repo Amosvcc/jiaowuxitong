@@ -16,9 +16,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.services import ColumnService, ImportExportService, ProjectService, SearchService
+from app.services import (
+    ColumnService,
+    ImportExportService,
+    ProjectService,
+    RowService,
+    SearchService,
+)
 from app.ui.delegates import DataColumnDelegate
-from app.ui.dialogs import ColumnSettingsDialog
+from app.ui.dialogs import ColumnSettingsDialog, StatisticsDialog
 from app.ui.table_model import DataTableModel
 from app.ui.table_view import DataTableView
 from app.ui.widgets import SearchBar
@@ -31,6 +37,7 @@ class MainWindow(QMainWindow):
         self.project_service = ProjectService()
         self.search_service = SearchService()
         self.column_service = ColumnService()
+        self.row_service = RowService()
         self.table_model = DataTableModel()
         self.table_view = DataTableView(self)
         self.table_view.setModel(self.table_model)
@@ -70,6 +77,9 @@ class MainWindow(QMainWindow):
         self.action_save_as = self._create_action("另存为")
         self.action_export = self._create_action("导出")
         self.action_column_settings = self._create_action("列设置")
+        self.action_terminate_row = self._create_action("终止行")
+        self.action_restore_row = self._create_action("恢复行")
+        self.action_statistics = self._create_action("统计")
 
         for action in (
             self.action_new,
@@ -82,6 +92,9 @@ class MainWindow(QMainWindow):
             self.file_menu.addAction(action)
 
         self.edit_menu.addAction(self.action_column_settings)
+        self.edit_menu.addAction(self.action_terminate_row)
+        self.edit_menu.addAction(self.action_restore_row)
+        self.edit_menu.addAction(self.action_statistics)
 
     def _setup_toolbar(self) -> None:
         toolbar = QToolBar("主工具栏", self)
@@ -91,9 +104,6 @@ class MainWindow(QMainWindow):
         self.action_add_row = self._create_action("新增行")
         self.action_add_column = self._create_action("新增列")
         self.action_delete = self._create_action("删除", enabled=False)
-        self.action_terminate_row = self._create_action("终止行", enabled=False)
-        self.action_restore_row = self._create_action("恢复行", enabled=False)
-        self.action_statistics = self._create_action("统计", enabled=False)
         self.search_bar = SearchBar(self)
 
         for action in (
@@ -143,10 +153,16 @@ class MainWindow(QMainWindow):
         self.action_add_row.triggered.connect(self._update_status_labels)
         self.action_add_column.triggered.connect(self._update_status_labels)
         self.action_column_settings.triggered.connect(self._open_selected_column_settings)
+        self.action_terminate_row.triggered.connect(self._terminate_selected_rows)
+        self.action_restore_row.triggered.connect(self._restore_selected_rows)
+        self.action_statistics.triggered.connect(self._open_statistics_dialog)
         self.table_model.dirty_changed.connect(self._on_dirty_changed)
         self.table_view.selectionModel().currentChanged.connect(self._on_current_changed)
         self.table_view.horizontalHeader().customContextMenuRequested.connect(
             self._show_column_header_menu
+        )
+        self.table_view.verticalHeader().customContextMenuRequested.connect(
+            self._show_row_header_menu
         )
         self.search_bar.search_requested.connect(self._perform_search)
         self.search_bar.previous_requested.connect(self._go_to_previous_match)
@@ -277,6 +293,10 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage(f"导出成功：{Path(file_path).name}", 5000)
 
+    def _open_statistics_dialog(self) -> None:
+        dialog = StatisticsDialog(self.table_model.project, self)
+        dialog.exec()
+
     def _open_selected_column_settings(self) -> None:
         self._open_column_settings_for_index(self._selected_column_index())
 
@@ -290,11 +310,53 @@ class MainWindow(QMainWindow):
             lambda: self._open_column_settings_for_index(column_index),
         )
 
+    def _show_row_header_menu(self, position) -> None:
+        row_index = self.table_view.verticalHeader().logicalIndexAt(position)
+        if row_index < 0:
+            return
+        global_position = self.table_view.verticalHeader().mapToGlobal(position)
+        self.table_view.selectRow(row_index)
+        self.table_view.show_row_header_menu(
+            global_position,
+            self._terminate_selected_rows,
+            self._restore_selected_rows,
+        )
+
     def _selected_column_index(self) -> int:
         current_index = self.table_view.currentIndex()
         if current_index.isValid():
             return current_index.column()
         return 0
+
+    def _selected_row_indexes(self) -> list[int]:
+        selected_rows = {index.row() for index in self.table_view.selectionModel().selectedIndexes()}
+        return sorted(selected_rows)
+
+    def _terminate_selected_rows(self) -> None:
+        row_indexes = self._selected_row_indexes()
+        if not row_indexes:
+            QMessageBox.information(self, "终止行", "请先选择行")
+            return
+        affected_rows = self.row_service.terminate_rows(self.table_model.project, row_indexes)
+        if affected_rows == 0:
+            return
+        self.table_model.refresh_rows(row_indexes)
+        self.table_model.mark_dirty()
+        self._update_window_title()
+        self.statusBar().showMessage(f"已终止 {affected_rows} 行", 5000)
+
+    def _restore_selected_rows(self) -> None:
+        row_indexes = self._selected_row_indexes()
+        if not row_indexes:
+            QMessageBox.information(self, "恢复行", "请先选择行")
+            return
+        affected_rows = self.row_service.restore_rows(self.table_model.project, row_indexes)
+        if affected_rows == 0:
+            return
+        self.table_model.refresh_rows(row_indexes)
+        self.table_model.mark_dirty()
+        self._update_window_title()
+        self.statusBar().showMessage(f"已恢复 {affected_rows} 行", 5000)
 
     def _open_column_settings_for_index(self, column_index: int) -> None:
         if column_index < 0 or column_index >= self.table_model.columnCount():

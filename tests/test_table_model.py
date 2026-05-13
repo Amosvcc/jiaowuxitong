@@ -72,6 +72,19 @@ def test_table_model_adds_empty_column_and_marks_dirty() -> None:
     assert all(model.cells[(row.id, new_column.id)].value == "" for row in model.rows)
 
 
+def test_table_model_does_not_create_cell_for_terminated_row_when_adding_column() -> None:
+    project = Project.create_empty(row_count=2, column_count=1)
+    project.rows[1].is_terminated = True
+    model = DataTableModel(project)
+
+    model.add_empty_column()
+
+    new_column = model.columns[-1]
+    assert (project.rows[0].id, new_column.id) in model.cells
+    assert (project.rows[1].id, new_column.id) not in model.cells
+    assert model.data(model.index(1, 1), Qt.ItemDataRole.DisplayRole) == ""
+
+
 def test_table_model_can_load_project() -> None:
     project = Project.create_empty(row_count=1, column_count=2)
     project.columns[0].name = "姓名"
@@ -124,3 +137,51 @@ def test_table_model_refresh_column_updates_header() -> None:
     model.refresh_column(0)
 
     assert model.headerData(0, Qt.Orientation.Horizontal) == "新列名"
+
+
+def test_table_model_terminated_row_is_not_editable() -> None:
+    project = Project.create_empty(row_count=1, column_count=1)
+    project.rows[0].is_terminated = True
+    model = DataTableModel(project)
+
+    flags = model.flags(model.index(0, 0))
+
+    assert not bool(flags & Qt.ItemFlag.ItemIsEditable)
+
+
+def test_table_model_terminated_row_rejects_set_data() -> None:
+    project = Project.create_empty(row_count=1, column_count=1)
+    project.rows[0].is_terminated = True
+    model = DataTableModel(project)
+
+    assert model.setData(model.index(0, 0), "新值") is False
+    assert model.data(model.index(0, 0), Qt.ItemDataRole.DisplayRole) == ""
+
+
+def test_table_model_terminated_row_has_background() -> None:
+    project = Project.create_empty(row_count=1, column_count=1)
+    project.rows[0].is_terminated = True
+    model = DataTableModel(project)
+
+    assert isinstance(model.data(model.index(0, 0), Qt.ItemDataRole.BackgroundRole), QBrush)
+
+
+def test_table_model_search_highlight_has_priority_over_terminated_background() -> None:
+    project = Project.create_empty(row_count=1, column_count=1)
+    project.rows[0].is_terminated = True
+    model = DataTableModel(project)
+    model.set_search_matches([(0, 0)], 0)
+
+    brush = model.data(model.index(0, 0), Qt.ItemDataRole.BackgroundRole)
+
+    assert isinstance(brush, QBrush)
+    assert brush.color().name().lower() == "#ffcc80"
+
+
+def test_table_model_vertical_header_marks_terminated_row() -> None:
+    project = Project.create_empty(row_count=2, column_count=1)
+    project.rows[1].is_terminated = True
+    model = DataTableModel(project)
+
+    assert model.headerData(0, Qt.Orientation.Vertical) == "1"
+    assert model.headerData(1, Qt.Orientation.Vertical) == "[终止] 2"

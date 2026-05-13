@@ -131,6 +131,8 @@ class Project:
         column = Column(id=next_column_id, name=f"字段{next_column_id}", order_index=len(self.columns))
         self.columns.append(column)
         for row in self.get_ordered_rows():
+            if row.is_terminated:
+                continue
             self.cells[(row.id, column.id)] = Cell(row_id=row.id, column_id=column.id, value="")
         self.updated_at = _now_iso()
         return column
