@@ -60,3 +60,27 @@ def test_row_service_ignores_invalid_indexes() -> None:
 
     assert affected_rows == 0
     assert project.rows[0].is_terminated is False
+
+
+def test_row_service_deletes_rows_and_cells() -> None:
+    project = Project.create_empty(row_count=3, column_count=2)
+    deleted_row_id = project.rows[1].id
+
+    affected_rows = RowService().delete_rows(project, [1])
+
+    assert affected_rows == 1
+    assert len(project.rows) == 2
+    assert all(row.id != deleted_row_id for row in project.rows)
+    assert all(row_id != deleted_row_id for row_id, _column_id in project.cells)
+    assert [row.order_index for row in project.rows] == [0, 1]
+    assert project.dirty is True
+
+
+def test_row_service_delete_ignores_invalid_indexes() -> None:
+    project = Project.create_empty(row_count=1, column_count=1)
+
+    affected_rows = RowService().delete_rows(project, [-1, 2])
+
+    assert affected_rows == 0
+    assert len(project.rows) == 1
+    assert project.dirty is False

@@ -125,7 +125,7 @@ class MainWindow(QMainWindow):
 
         self.action_add_row = self._create_action("新增行")
         self.action_add_column = self._create_action("新增列")
-        self.action_delete = self._create_action("删除", enabled=False)
+        self.action_delete = self._create_action("删除")
         self.search_bar = SearchBar(self)
 
         for action in (
@@ -179,6 +179,7 @@ class MainWindow(QMainWindow):
         self.action_add_column.triggered.connect(self.table_model.add_empty_column)
         self.action_add_row.triggered.connect(self._update_status_labels)
         self.action_add_column.triggered.connect(self._update_status_labels)
+        self.action_delete.triggered.connect(self._delete_selected_items)
         self.action_column_settings.triggered.connect(self._open_selected_column_settings)
         self.action_terminate_row.triggered.connect(self._terminate_selected_rows)
         self.action_restore_row.triggered.connect(self._restore_selected_rows)
@@ -373,6 +374,7 @@ class MainWindow(QMainWindow):
             lambda: self._open_column_settings_for_index(column_index),
             lambda: self._open_column_filter_dialog(column_index),
             lambda: self._clear_column_filter(column_index),
+            lambda: self._delete_columns([column_index]),
         )
 
     def _show_row_header_menu(self, position) -> None:
@@ -385,6 +387,7 @@ class MainWindow(QMainWindow):
             global_position,
             self._terminate_selected_rows,
             self._restore_selected_rows,
+            self._delete_selected_rows,
         )
 
     def _selected_column_index(self) -> int:
@@ -400,6 +403,65 @@ class MainWindow(QMainWindow):
             if index.isValid() and self.table_model.mapToSource(index).isValid()
         }
         return sorted(selected_rows)
+
+    def _selected_column_indexes(self) -> list[int]:
+        selected_columns = {
+            index.column()
+            for index in self.table_view.selectionModel().selectedColumns()
+            if index.isValid()
+        }
+        return sorted(selected_columns)
+
+    def _delete_selected_items(self) -> None:
+        column_indexes = self._selected_column_indexes()
+        if column_indexes:
+            self._delete_columns(column_indexes)
+            return
+        self._delete_selected_rows()
+
+    def _delete_selected_rows(self) -> None:
+        row_indexes = self._selected_row_indexes()
+        if not row_indexes:
+            current_index = self.table_view.currentIndex()
+            if current_index.isValid():
+                source_index = self.table_model.mapToSource(current_index)
+                if source_index.isValid():
+                    row_indexes = [source_index.row()]
+        if not row_indexes:
+            QMessageBox.information(self, "删除", "请先选择要删除的行或列。")
+            return
+
+        affected_rows = self.row_service.delete_rows(self.table_model.project, row_indexes)
+        if affected_rows == 0:
+            return
+        self.source_table_model.load_project(self.table_model.project)
+        self.table_model.refresh_filter()
+        self._perform_search(self.search_bar.keyword())
+        self._update_window_title()
+        self._update_status_labels()
+        self.statusBar().showMessage(f"已删除 {affected_rows} 行", 5000)
+
+    def _delete_columns(self, column_indexes: list[int]) -> None:
+        valid_column_ids = [
+            self.source_table_model.column_id_at(column_index)
+            for column_index in column_indexes
+            if 0 <= column_index < self.source_table_model.columnCount()
+        ]
+        if not valid_column_ids:
+            QMessageBox.information(self, "删除", "请先选择要删除的列。")
+            return
+
+        affected_columns = self.column_service.delete_columns(self.table_model.project, column_indexes)
+        if affected_columns == 0:
+            return
+        for column_id in valid_column_ids:
+            self.table_model.filter_state.filters.pop(str(column_id), None)
+        self.source_table_model.load_project(self.table_model.project)
+        self.table_model.refresh_filter()
+        self._perform_search(self.search_bar.keyword())
+        self._update_window_title()
+        self._update_status_labels()
+        self.statusBar().showMessage(f"已删除 {affected_columns} 列", 5000)
 
     def _terminate_selected_rows(self) -> None:
         row_indexes = self._selected_row_indexes()

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
-from app.models import Project
+from app.models import ColumnFilterCriteria, Project
 from app.ui.main_window import MainWindow
 from app.ui.table_view import DataTableView
 from app.ui.widgets import SearchBar
@@ -45,7 +45,7 @@ def test_main_window_initial_state() -> None:
         assert window.search_bar.search_input.placeholderText() == "搜索..."
         assert not window.search_bar.previous_button.isEnabled()
         assert not window.search_bar.next_button.isEnabled()
-        assert not window.action_delete.isEnabled()
+        assert window.action_delete.isEnabled()
     finally:
         window.close()
         app.processEvents()
@@ -101,6 +101,51 @@ def test_main_window_can_restore_selected_rows() -> None:
 
         assert window.table_model.rows[1].is_terminated is False
         assert window.table_model.rows[1].terminated_at is None
+        assert window.table_model.project.dirty is True
+    finally:
+        window.table_model.mark_clean()
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_can_delete_selected_rows() -> None:
+    app = get_qapp()
+    window = MainWindow()
+    deleted_row_id = window.table_model.rows[1].id
+    window.table_view.selectRow(1)
+
+    try:
+        window._delete_selected_rows()
+        app.processEvents()
+
+        assert window.table_model.rowCount() == 9
+        assert all(row.id != deleted_row_id for row in window.table_model.rows)
+        assert all(row_id != deleted_row_id for row_id, _column_id in window.table_model.cells)
+        assert window.table_model.project.dirty is True
+    finally:
+        window.table_model.mark_clean()
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_can_delete_columns_and_clear_filter() -> None:
+    app = get_qapp()
+    window = MainWindow()
+    deleted_column_id = window.source_table_model.column_id_at(0)
+    window.table_model.set_column_filter(
+        ColumnFilterCriteria(
+            column_id=deleted_column_id,
+            selected_values={"x"},
+        )
+    )
+
+    try:
+        window._delete_columns([0])
+        app.processEvents()
+
+        assert window.table_model.columnCount() == 4
+        assert deleted_column_id not in window.table_model.filter_state.filters
+        assert all(str(column.id) != deleted_column_id for column in window.table_model.columns)
         assert window.table_model.project.dirty is True
     finally:
         window.table_model.mark_clean()

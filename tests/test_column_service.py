@@ -93,3 +93,27 @@ def test_column_service_rejects_duplicate_dropdown_options() -> None:
             dropdown_options=["进行中", "进行中"],
             allow_custom_value=True,
         )
+
+
+def test_column_service_deletes_columns_and_cells() -> None:
+    project = Project.create_empty(row_count=2, column_count=3)
+    deleted_column_id = project.columns[1].id
+
+    affected_columns = ColumnService().delete_columns(project, [1])
+
+    assert affected_columns == 1
+    assert len(project.columns) == 2
+    assert all(column.id != deleted_column_id for column in project.columns)
+    assert all(column_id != deleted_column_id for _row_id, column_id in project.cells)
+    assert [column.order_index for column in project.columns] == [0, 1]
+    assert project.dirty is True
+
+
+def test_column_service_delete_ignores_invalid_indexes() -> None:
+    project = Project.create_empty(row_count=1, column_count=1)
+
+    affected_columns = ColumnService().delete_columns(project, [-1, 2])
+
+    assert affected_columns == 0
+    assert len(project.columns) == 1
+    assert project.dirty is False
