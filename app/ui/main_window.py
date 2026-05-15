@@ -18,13 +18,14 @@ from PySide6.QtWidgets import (
 
 from app.services import (
     ColumnService,
+    DataUpdateService,
     ImportExportService,
     ProjectService,
     RowService,
     SearchService,
 )
 from app.ui.delegates import DataColumnDelegate
-from app.ui.dialogs import ColumnSettingsDialog, StatisticsDialog
+from app.ui.dialogs import ColumnSettingsDialog, DataUpdateDialog, StatisticsDialog
 from app.ui.table_model import DataTableModel
 from app.ui.table_view import DataTableView
 from app.ui.widgets import SearchBar
@@ -34,6 +35,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.import_export_service = ImportExportService()
+        self.data_update_service = DataUpdateService()
         self.project_service = ProjectService()
         self.search_service = SearchService()
         self.column_service = ColumnService()
@@ -76,6 +78,7 @@ class MainWindow(QMainWindow):
         self.action_save = self._create_action("保存")
         self.action_save_as = self._create_action("另存为")
         self.action_export = self._create_action("导出")
+        self.action_data_update = self._create_action("数据更新")
         self.action_column_settings = self._create_action("列设置")
         self.action_terminate_row = self._create_action("终止行")
         self.action_restore_row = self._create_action("恢复行")
@@ -88,6 +91,7 @@ class MainWindow(QMainWindow):
             self.action_save,
             self.action_save_as,
             self.action_export,
+            self.action_data_update,
         ):
             self.file_menu.addAction(action)
 
@@ -112,6 +116,7 @@ class MainWindow(QMainWindow):
             self.action_import,
             self.action_save,
             self.action_export,
+            self.action_data_update,
         ):
             toolbar.addAction(action)
 
@@ -148,6 +153,7 @@ class MainWindow(QMainWindow):
         self.action_save.triggered.connect(self._save_project)
         self.action_save_as.triggered.connect(self._save_project_as)
         self.action_export.triggered.connect(self._export_file)
+        self.action_data_update.triggered.connect(self._open_data_update_dialog)
         self.action_add_row.triggered.connect(self.table_model.add_empty_row)
         self.action_add_column.triggered.connect(self.table_model.add_empty_column)
         self.action_add_row.triggered.connect(self._update_status_labels)
@@ -297,6 +303,31 @@ class MainWindow(QMainWindow):
         dialog = StatisticsDialog(self.table_model.project, self)
         dialog.exec()
 
+    def _open_data_update_dialog(self) -> None:
+        dialog = DataUpdateDialog(
+            self.table_model.project,
+            self,
+            import_export_service=self.import_export_service,
+            data_update_service=self.data_update_service,
+        )
+        dialog.exec()
+        if dialog.result is None:
+            return
+
+        if dialog.result.has_changes:
+            self.table_model.load_project(self.table_model.project)
+            self.table_model.mark_dirty()
+            self.search_bar.clear()
+            self.search_bar.set_navigation_enabled(False)
+            self._clear_search_status()
+            self._update_status_labels()
+            self._update_window_title()
+
+        self.statusBar().showMessage(
+            f"数据更新完成：更新 {dialog.result.updated_cells} 个单元格，新增 {dialog.result.appended_rows} 行",
+            5000,
+        )
+
     def _open_selected_column_settings(self) -> None:
         self._open_column_settings_for_index(self._selected_column_index())
 
@@ -335,7 +366,7 @@ class MainWindow(QMainWindow):
     def _terminate_selected_rows(self) -> None:
         row_indexes = self._selected_row_indexes()
         if not row_indexes:
-            QMessageBox.information(self, "终止行", "请先选择行")
+            QMessageBox.information(self, "终止行", "请先选择行。")
             return
         affected_rows = self.row_service.terminate_rows(self.table_model.project, row_indexes)
         if affected_rows == 0:
@@ -348,7 +379,7 @@ class MainWindow(QMainWindow):
     def _restore_selected_rows(self) -> None:
         row_indexes = self._selected_row_indexes()
         if not row_indexes:
-            QMessageBox.information(self, "恢复行", "请先选择行")
+            QMessageBox.information(self, "恢复行", "请先选择行。")
             return
         affected_rows = self.row_service.restore_rows(self.table_model.project, row_indexes)
         if affected_rows == 0:

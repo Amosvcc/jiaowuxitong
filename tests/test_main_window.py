@@ -33,6 +33,7 @@ def test_main_window_initial_state() -> None:
         assert window.action_save.isEnabled()
         assert window.action_save_as.isEnabled()
         assert window.action_export.isEnabled()
+        assert window.action_data_update.isEnabled()
         assert window.action_add_row.isEnabled()
         assert window.action_add_column.isEnabled()
         assert window.action_column_settings.isEnabled()
