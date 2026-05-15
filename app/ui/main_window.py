@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
@@ -25,6 +25,7 @@ from app.services import (
     ProjectService,
     RowService,
     SearchService,
+    UndoService,
 )
 from app.ui.delegates import DataColumnDelegate
 from app.ui.dialogs import (
@@ -51,7 +52,9 @@ class MainWindow(QMainWindow):
         self.row_service = RowService()
         self.pivot_service = PivotService()
         self.filter_service = FilterService()
+        self.undo_service = UndoService()
         self.source_table_model = DataTableModel()
+        self.source_table_model.before_project_change = self._push_undo_snapshot
         self.table_model = TableFilterProxyModel(filter_service=self.filter_service)
         self.table_model.setSourceModel(self.source_table_model)
         self.table_view = DataTableView(self)
@@ -93,6 +96,8 @@ class MainWindow(QMainWindow):
         self.action_save_as = self._create_action("另存为")
         self.action_export = self._create_action("导出")
         self.action_data_update = self._create_action("数据更新")
+        self.action_undo = self._create_action("撤销", enabled=False)
+        self.action_undo.setShortcut(QKeySequence.StandardKey.Undo)
         self.action_column_settings = self._create_action("列设置")
         self.action_terminate_row = self._create_action("终止行")
         self.action_restore_row = self._create_action("恢复行")
@@ -112,6 +117,7 @@ class MainWindow(QMainWindow):
             self.file_menu.addAction(action)
 
         self.edit_menu.addAction(self.action_column_settings)
+        self.edit_menu.addAction(self.action_undo)
         self.edit_menu.addAction(self.action_terminate_row)
         self.edit_menu.addAction(self.action_restore_row)
         self.edit_menu.addAction(self.action_clear_all_filters)
@@ -142,6 +148,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.action_add_row)
         toolbar.addAction(self.action_add_column)
         toolbar.addAction(self.action_delete)
+        toolbar.addAction(self.action_undo)
 
         toolbar.addSeparator()
         toolbar.addAction(self.action_terminate_row)
@@ -175,8 +182,9 @@ class MainWindow(QMainWindow):
         self.action_save_as.triggered.connect(self._save_project_as)
         self.action_export.triggered.connect(self._export_file)
         self.action_data_update.triggered.connect(self._open_data_update_dialog)
-        self.action_add_row.triggered.connect(self.table_model.add_empty_row)
-        self.action_add_column.triggered.connect(self.table_model.add_empty_column)
+        self.action_undo.triggered.connect(self._undo_last_operation)
+        self.action_add_row.triggered.connect(self._add_row_after_selection)
+        self.action_add_column.triggered.connect(self._add_column_after_selection)
         self.action_add_row.triggered.connect(self._update_status_labels)
         self.action_add_column.triggered.connect(self._update_status_labels)
         self.action_delete.triggered.connect(self._delete_selected_items)
@@ -210,6 +218,7 @@ class MainWindow(QMainWindow):
 
         project = self.project_service.create_project()
         self.table_model.load_project(project)
+        self._clear_undo_history()
         self.search_bar.clear()
         self.search_bar.set_navigation_enabled(False)
         self._update_status_labels()
@@ -239,6 +248,7 @@ class MainWindow(QMainWindow):
             return
 
         self.table_model.load_project(project)
+        self._clear_undo_history()
         self.search_bar.clear()
         self.search_bar.set_navigation_enabled(False)
         self._update_status_labels()
@@ -292,6 +302,7 @@ class MainWindow(QMainWindow):
 
         project.dirty = True
         self.table_model.load_project(project)
+        self._clear_undo_history()
         self.search_bar.clear()
         self.search_bar.set_navigation_enabled(False)
         self._update_status_labels()
@@ -342,6 +353,7 @@ class MainWindow(QMainWindow):
             self,
             import_export_service=self.import_export_service,
             data_update_service=self.data_update_service,
+            before_project_change=self._push_undo_snapshot,
         )
         dialog.exec()
         if dialog.result is None:
@@ -355,6 +367,8 @@ class MainWindow(QMainWindow):
             self._clear_search_status()
             self._update_status_labels()
             self._update_window_title()
+        elif dialog.undo_snapshot_pushed:
+            self._discard_latest_undo_snapshot()
 
         self.statusBar().showMessage(
             f"数据更新完成：更新 {dialog.result.updated_cells} 个单元格，新增 {dialog.result.appended_rows} 行",
@@ -412,6 +426,37 @@ class MainWindow(QMainWindow):
         }
         return sorted(selected_columns)
 
+    def _selected_source_row_index_for_insert(self) -> int | None:
+        selected_rows = self._selected_row_indexes()
+        if selected_rows:
+            return selected_rows[-1]
+
+        current_index = self.table_view.currentIndex()
+        if not current_index.isValid():
+            return None
+        source_index = self.table_model.mapToSource(current_index)
+        return source_index.row() if source_index.isValid() else None
+
+    def _selected_source_column_index_for_insert(self) -> int | None:
+        selected_columns = self._selected_column_indexes()
+        if selected_columns:
+            return selected_columns[-1]
+
+        current_index = self.table_view.currentIndex()
+        if not current_index.isValid():
+            return None
+        return current_index.column()
+
+    def _add_row_after_selection(self) -> None:
+        self.table_model.add_empty_row(self._selected_source_row_index_for_insert())
+        self._perform_search(self.search_bar.keyword())
+        self._update_status_labels()
+
+    def _add_column_after_selection(self) -> None:
+        self.table_model.add_empty_column(self._selected_source_column_index_for_insert())
+        self._perform_search(self.search_bar.keyword())
+        self._update_status_labels()
+
     def _delete_selected_items(self) -> None:
         column_indexes = self._selected_column_indexes()
         if column_indexes:
@@ -431,6 +476,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "删除", "请先选择要删除的行或列。")
             return
 
+        self._push_undo_snapshot()
         affected_rows = self.row_service.delete_rows(self.table_model.project, row_indexes)
         if affected_rows == 0:
             return
@@ -451,6 +497,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "删除", "请先选择要删除的列。")
             return
 
+        self._push_undo_snapshot()
         affected_columns = self.column_service.delete_columns(self.table_model.project, column_indexes)
         if affected_columns == 0:
             return
@@ -468,6 +515,7 @@ class MainWindow(QMainWindow):
         if not row_indexes:
             QMessageBox.information(self, "终止行", "请先选择行。")
             return
+        self._push_undo_snapshot()
         affected_rows = self.row_service.terminate_rows(self.table_model.project, row_indexes)
         if affected_rows == 0:
             return
@@ -483,6 +531,7 @@ class MainWindow(QMainWindow):
         if not row_indexes:
             QMessageBox.information(self, "恢复行", "请先选择行。")
             return
+        self._push_undo_snapshot()
         affected_rows = self.row_service.restore_rows(self.table_model.project, row_indexes)
         if affected_rows == 0:
             return
@@ -547,12 +596,14 @@ class MainWindow(QMainWindow):
                 return
 
             try:
+                self._push_undo_snapshot()
                 self.column_service.update_column(
                     self.table_model.project,
                     column_index,
                     **dialog.get_settings(),
                 )
             except ValueError as exc:
+                self._discard_latest_undo_snapshot()
                 dialog.show_validation_error(str(exc))
                 continue
 
@@ -560,6 +611,33 @@ class MainWindow(QMainWindow):
             self.table_model.mark_dirty()
             self._update_window_title()
             break
+
+    def _push_undo_snapshot(self) -> None:
+        self.undo_service.push_snapshot(self.table_model.project)
+        self._update_undo_action()
+
+    def _clear_undo_history(self) -> None:
+        self.undo_service.clear()
+        self._update_undo_action()
+
+    def _discard_latest_undo_snapshot(self) -> None:
+        self.undo_service.discard_latest()
+        self._update_undo_action()
+
+    def _undo_last_operation(self) -> None:
+        project = self.undo_service.pop_snapshot()
+        if project is None:
+            return
+        self.table_model.load_project(project)
+        self.table_model.refresh_filter()
+        self._perform_search(self.search_bar.keyword())
+        self._update_status_labels()
+        self._update_window_title()
+        self._update_undo_action()
+        self.statusBar().showMessage("已撤销上一步操作", 5000)
+
+    def _update_undo_action(self) -> None:
+        self.action_undo.setEnabled(self.undo_service.can_undo)
 
     def _perform_search(self, keyword: str | None = None) -> None:
         search_keyword = self.search_bar.keyword() if keyword is None else keyword

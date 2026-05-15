@@ -118,18 +118,30 @@ class Project:
         self.updated_at = _now_iso()
 
     def append_row(self) -> Row:
+        return self.insert_row(len(self.rows))
+
+    def insert_row(self, row_index: int) -> Row:
         next_row_id = 1 if not self.rows else max(row.id for row in self.rows) + 1
-        row = Row(id=next_row_id, order_index=len(self.rows))
-        self.rows.append(row)
+        insert_index = min(max(row_index, 0), len(self.rows))
+        row = Row(id=next_row_id, order_index=insert_index)
+        self.rows.insert(insert_index, row)
+        for order_index, existing_row in enumerate(self.rows):
+            existing_row.order_index = order_index
         for column in self.get_ordered_columns():
             self.cells[(row.id, column.id)] = Cell(row_id=row.id, column_id=column.id, value="")
         self.updated_at = _now_iso()
         return row
 
     def append_column(self) -> Column:
+        return self.insert_column(len(self.columns))
+
+    def insert_column(self, column_index: int) -> Column:
         next_column_id = 1 if not self.columns else max(column.id for column in self.columns) + 1
-        column = Column(id=next_column_id, name=f"字段{next_column_id}", order_index=len(self.columns))
-        self.columns.append(column)
+        insert_index = min(max(column_index, 0), len(self.columns))
+        column = Column(id=next_column_id, name=f"字段{next_column_id}", order_index=insert_index)
+        self.columns.insert(insert_index, column)
+        for order_index, existing_column in enumerate(self.columns):
+            existing_column.order_index = order_index
         for row in self.get_ordered_rows():
             if row.is_terminated:
                 continue

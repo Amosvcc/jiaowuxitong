@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
 
@@ -17,6 +19,7 @@ class DataTableModel(QAbstractTableModel):
         self.cells = self.project.cells
         self.search_matches: list[tuple[int, int]] = []
         self.current_search_index = -1
+        self.before_project_change: Callable[[], None] | None = None
         self._search_match_set: set[tuple[int, int]] = set()
         self._search_brush = QBrush(QColor("#fff59d"))
         self._current_search_brush = QBrush(QColor("#ffcc80"))
@@ -74,7 +77,12 @@ class DataTableModel(QAbstractTableModel):
             return False
 
         column = self.columns[index.column()]
-        self.project.set_cell_value(row.id, column.id, "" if value is None else str(value))
+        old_value = self.project.get_cell_value(row.id, column.id)
+        new_value = "" if value is None else str(value)
+        if old_value == new_value:
+            return False
+        self._notify_before_project_change()
+        self.project.set_cell_value(row.id, column.id, new_value)
         self.dataChanged.emit(index, index, [Qt.DisplayRole, Qt.EditRole])
         self.mark_dirty()
         return True
@@ -109,19 +117,25 @@ class DataTableModel(QAbstractTableModel):
             raise IndexError("列索引超出范围")
         return str(self.columns[column_index].id)
 
-    def add_empty_row(self) -> None:
-        row_index = len(self.rows)
+    def add_empty_row(self, after_row_index: int | None = None) -> None:
+        self._notify_before_project_change()
+        row_index = len(self.rows) if after_row_index is None else min(max(after_row_index + 1, 0), len(self.rows))
         self.beginInsertRows(QModelIndex(), row_index, row_index)
-        self.project.append_row()
+        self.project.insert_row(row_index)
         self.rows = self.project.rows
         self.cells = self.project.cells
         self.endInsertRows()
         self.mark_dirty()
 
-    def add_empty_column(self) -> None:
-        column_index = len(self.columns)
+    def add_empty_column(self, after_column_index: int | None = None) -> None:
+        self._notify_before_project_change()
+        column_index = (
+            len(self.columns)
+            if after_column_index is None
+            else min(max(after_column_index + 1, 0), len(self.columns))
+        )
         self.beginInsertColumns(QModelIndex(), column_index, column_index)
-        self.project.append_column()
+        self.project.insert_column(column_index)
         self.columns = self.project.columns
         self.cells = self.project.cells
         self.endInsertColumns()
@@ -205,3 +219,7 @@ class DataTableModel(QAbstractTableModel):
         for row_index, column_index in positions:
             index = self.index(row_index, column_index)
             self.dataChanged.emit(index, index, [Qt.BackgroundRole, Qt.ForegroundRole, Qt.FontRole])
+
+    def _notify_before_project_change(self) -> None:
+        if self.before_project_change is not None:
+            self.before_project_change()

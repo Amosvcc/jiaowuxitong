@@ -7,6 +7,7 @@ from app.services.project_service import ProjectService
 from app.services.row_service import RowService
 from app.services.search_service import SearchService
 from app.services.statistics_service import StatisticsService
+from app.services.undo_service import UndoService
 
 __all__ = [
     "ColumnService",
@@ -18,4 +19,5 @@ __all__ = [
     "RowService",
     "SearchService",
     "StatisticsService",
+    "UndoService",
 ]

@@ -34,6 +34,8 @@ def test_main_window_initial_state() -> None:
         assert window.action_save_as.isEnabled()
         assert window.action_export.isEnabled()
         assert window.action_data_update.isEnabled()
+        assert window.action_undo.text() == "撤销"
+        assert not window.action_undo.isEnabled()
         assert window.action_add_row.isEnabled()
         assert window.action_add_column.isEnabled()
         assert window.action_column_settings.isEnabled()
@@ -65,6 +67,54 @@ def test_main_window_actions_update_model_and_status() -> None:
         assert window.row_count_label.text() == "行数：11"
         assert window.column_count_label.text() == "列数：6"
         assert window.windowTitle().endswith("*")
+    finally:
+        window.table_model.mark_clean()
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_adds_row_after_current_selection() -> None:
+    app = get_qapp()
+    window = MainWindow()
+    original_row_ids = [row.id for row in window.table_model.rows]
+    window.table_view.setCurrentIndex(window.table_model.index(1, 0))
+
+    try:
+        window.action_add_row.trigger()
+        app.processEvents()
+
+        assert window.table_model.rowCount() == 11
+        assert [row.id for row in window.table_model.rows[:4]] == [
+            original_row_ids[0],
+            original_row_ids[1],
+            11,
+            original_row_ids[2],
+        ]
+        assert window.table_model.project.dirty is True
+    finally:
+        window.table_model.mark_clean()
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_adds_column_after_current_selection() -> None:
+    app = get_qapp()
+    window = MainWindow()
+    original_column_ids = [column.id for column in window.table_model.columns]
+    window.table_view.setCurrentIndex(window.table_model.index(0, 1))
+
+    try:
+        window.action_add_column.trigger()
+        app.processEvents()
+
+        assert window.table_model.columnCount() == 6
+        assert [column.id for column in window.table_model.columns[:4]] == [
+            original_column_ids[0],
+            original_column_ids[1],
+            6,
+            original_column_ids[2],
+        ]
+        assert window.table_model.project.dirty is True
     finally:
         window.table_model.mark_clean()
         window.close()
@@ -128,6 +178,26 @@ def test_main_window_can_delete_selected_rows() -> None:
         app.processEvents()
 
 
+def test_main_window_undo_restores_deleted_row() -> None:
+    app = get_qapp()
+    window = MainWindow()
+    deleted_row_id = window.table_model.rows[1].id
+    window.table_view.selectRow(1)
+
+    try:
+        window._delete_selected_rows()
+        window._undo_last_operation()
+        app.processEvents()
+
+        assert window.table_model.rowCount() == 10
+        assert any(row.id == deleted_row_id for row in window.table_model.rows)
+        assert window.table_model.project.dirty is False
+        assert not window.action_undo.isEnabled()
+    finally:
+        window.close()
+        app.processEvents()
+
+
 def test_main_window_can_delete_columns_and_clear_filter() -> None:
     app = get_qapp()
     window = MainWindow()
@@ -149,6 +219,56 @@ def test_main_window_can_delete_columns_and_clear_filter() -> None:
         assert window.table_model.project.dirty is True
     finally:
         window.table_model.mark_clean()
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_undo_restores_deleted_column() -> None:
+    app = get_qapp()
+    window = MainWindow()
+    deleted_column_id = window.source_table_model.column_id_at(0)
+
+    try:
+        window._delete_columns([0])
+        window._undo_last_operation()
+        app.processEvents()
+
+        assert window.table_model.columnCount() == 5
+        assert any(str(column.id) == deleted_column_id for column in window.table_model.columns)
+        assert window.table_model.project.dirty is False
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_undo_restores_cell_edit() -> None:
+    app = get_qapp()
+    window = MainWindow()
+
+    try:
+        window.table_model.setData(window.table_model.index(0, 0), "新值")
+        window._undo_last_operation()
+        app.processEvents()
+
+        assert window.table_model.data(window.table_model.index(0, 0)) == ""
+        assert window.table_model.project.dirty is False
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_undo_restores_added_row() -> None:
+    app = get_qapp()
+    window = MainWindow()
+
+    try:
+        window.action_add_row.trigger()
+        window._undo_last_operation()
+        app.processEvents()
+
+        assert window.table_model.rowCount() == 10
+        assert window.table_model.project.dirty is False
+    finally:
         window.close()
         app.processEvents()
 

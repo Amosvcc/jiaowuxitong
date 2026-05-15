@@ -59,6 +59,18 @@ def test_table_model_adds_empty_row_and_marks_dirty() -> None:
     ]
 
 
+def test_table_model_inserts_empty_row_after_selected_index() -> None:
+    project = Project.create_empty(row_count=3, column_count=1)
+    original_row_ids = [row.id for row in project.rows]
+    model = DataTableModel(project)
+
+    model.add_empty_row(after_row_index=0)
+
+    assert model.rowCount() == 4
+    assert [row.id for row in model.rows[:3]] == [original_row_ids[0], 4, original_row_ids[1]]
+    assert [row.order_index for row in model.rows] == [0, 1, 2, 3]
+
+
 def test_table_model_adds_empty_column_and_marks_dirty() -> None:
     model = DataTableModel()
 
@@ -70,6 +82,18 @@ def test_table_model_adds_empty_column_and_marks_dirty() -> None:
     assert new_column.name == "字段6"
     assert new_column.field_type == "text"
     assert all(model.cells[(row.id, new_column.id)].value == "" for row in model.rows)
+
+
+def test_table_model_inserts_empty_column_after_selected_index() -> None:
+    project = Project.create_empty(row_count=1, column_count=3)
+    original_column_ids = [column.id for column in project.columns]
+    model = DataTableModel(project)
+
+    model.add_empty_column(after_column_index=0)
+
+    assert model.columnCount() == 4
+    assert [column.id for column in model.columns[:3]] == [original_column_ids[0], 4, original_column_ids[1]]
+    assert [column.order_index for column in model.columns] == [0, 1, 2, 3]
 
 
 def test_table_model_does_not_create_cell_for_terminated_row_when_adding_column() -> None:

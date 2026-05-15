@@ -54,12 +54,12 @@ class TableFilterProxyModel(QSortFilterProxyModel):
         self.clear_filters()
         self.source_table_model.load_project(project)
 
-    def add_empty_row(self) -> None:
-        self.source_table_model.add_empty_row()
+    def add_empty_row(self, after_row_index: int | None = None) -> None:
+        self.source_table_model.add_empty_row(after_row_index)
         self._invalidate_rows_filter()
 
-    def add_empty_column(self) -> None:
-        self.source_table_model.add_empty_column()
+    def add_empty_column(self, after_column_index: int | None = None) -> None:
+        self.source_table_model.add_empty_column(after_column_index)
         self._invalidate_rows_filter()
 
     def mark_dirty(self) -> None:

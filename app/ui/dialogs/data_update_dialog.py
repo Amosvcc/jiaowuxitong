@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -32,6 +33,7 @@ class DataUpdateDialog(QDialog):
         *,
         import_export_service: ImportExportService | None = None,
         data_update_service: DataUpdateService | None = None,
+        before_project_change: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("数据更新")
@@ -39,9 +41,11 @@ class DataUpdateDialog(QDialog):
         self.project = project
         self.import_export_service = import_export_service or ImportExportService()
         self.data_update_service = data_update_service or DataUpdateService()
+        self.before_project_change = before_project_change
         self.source_columns: list[str] = []
         self.source_rows: list[list[str]] = []
         self.result: DataUpdateResult | None = None
+        self.undo_snapshot_pushed = False
 
         self.file_path_input = QLineEdit(self)
         self.file_path_input.setReadOnly(True)
@@ -148,7 +152,12 @@ class DataUpdateDialog(QDialog):
             QMessageBox.warning(self, "数据更新", "请选择主表和更新表匹配字段。")
             return
 
+        snapshot_pushed = False
         try:
+            if self.before_project_change is not None:
+                self.before_project_change()
+                snapshot_pushed = True
+                self.undo_snapshot_pushed = True
             result = self.data_update_service.update_project_from_table(
                 project=self.project,
                 source_columns=self.source_columns,
@@ -162,6 +171,7 @@ class DataUpdateDialog(QDialog):
                 update_terminated_rows=self.update_terminated_rows_checkbox.isChecked(),
             )
         except DuplicateMatchKeyError as exc:
+            self._discard_parent_undo_snapshot(snapshot_pushed)
             lines = [str(exc)]
             if exc.duplicate_target_keys:
                 lines.append(f"主表重复值：{', '.join(exc.duplicate_target_keys)}")
@@ -170,6 +180,7 @@ class DataUpdateDialog(QDialog):
             QMessageBox.critical(self, "数据更新失败", "\n".join(lines))
             return
         except Exception as exc:
+            self._discard_parent_undo_snapshot(snapshot_pushed)
             QMessageBox.critical(self, "数据更新失败", str(exc))
             return
 
@@ -177,6 +188,11 @@ class DataUpdateDialog(QDialog):
         self.preview_label.setText(self.format_result_summary(result))
         self._update_view_details_button()
         QMessageBox.information(self, "数据更新完成", self.format_result_summary(result))
+
+    def _discard_parent_undo_snapshot(self, snapshot_pushed: bool) -> None:
+        if snapshot_pushed and self.parent() is not None and hasattr(self.parent(), "_discard_latest_undo_snapshot"):
+            self.parent()._discard_latest_undo_snapshot()
+            self.undo_snapshot_pushed = False
 
     def open_detail_dialog(self) -> None:
         if self.result is None or not self.result.details:
