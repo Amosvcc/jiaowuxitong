@@ -1,6 +1,7 @@
 from app.services.column_service import ColumnService
 from app.services.data_update_service import DataUpdateService
 from app.services.import_export_service import ImportExportService
+from app.services.pivot_service import PivotService
 from app.services.project_service import ProjectService
 from app.services.row_service import RowService
 from app.services.search_service import SearchService
@@ -10,6 +11,7 @@ __all__ = [
     "ColumnService",
     "DataUpdateService",
     "ImportExportService",
+    "PivotService",
     "ProjectService",
     "RowService",
     "SearchService",

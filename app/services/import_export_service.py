@@ -6,7 +6,8 @@ import pandas as pd
 
 from app.core import UnsupportedFileFormatError
 from app.io import CsvAdapter, ExcelAdapter, ExportAdapter
-from app.models import Project
+from app.models import PivotResult, Project
+from app.services.pivot_service import PivotService
 
 
 class ImportExportService:
@@ -14,6 +15,7 @@ class ImportExportService:
         self.csv_adapter = CsvAdapter()
         self.excel_adapter = ExcelAdapter()
         self.export_adapter = ExportAdapter()
+        self.pivot_service = PivotService()
 
     def import_file(self, path: str) -> Project:
         return Project.from_dataframe(self._read_dataframe(path))
@@ -29,6 +31,9 @@ class ImportExportService:
 
     def export_file(self, project: Project, path: str) -> None:
         self.export_adapter.write(project.to_dataframe(), path)
+
+    def export_pivot_result(self, result: PivotResult, path: str) -> None:
+        self.export_adapter.write(self.pivot_service.build_pivot_dataframe(result), path)
 
     def _read_dataframe(self, path: str):
         suffix = Path(path).suffix.lower()

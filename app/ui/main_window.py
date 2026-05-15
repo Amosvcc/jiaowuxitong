@@ -20,12 +20,13 @@ from app.services import (
     ColumnService,
     DataUpdateService,
     ImportExportService,
+    PivotService,
     ProjectService,
     RowService,
     SearchService,
 )
 from app.ui.delegates import DataColumnDelegate
-from app.ui.dialogs import ColumnSettingsDialog, DataUpdateDialog, StatisticsDialog
+from app.ui.dialogs import ColumnSettingsDialog, DataUpdateDialog, PivotDialog, StatisticsDialog
 from app.ui.table_model import DataTableModel
 from app.ui.table_view import DataTableView
 from app.ui.widgets import SearchBar
@@ -40,6 +41,7 @@ class MainWindow(QMainWindow):
         self.search_service = SearchService()
         self.column_service = ColumnService()
         self.row_service = RowService()
+        self.pivot_service = PivotService()
         self.table_model = DataTableModel()
         self.table_view = DataTableView(self)
         self.table_view.setModel(self.table_model)
@@ -83,6 +85,7 @@ class MainWindow(QMainWindow):
         self.action_terminate_row = self._create_action("终止行")
         self.action_restore_row = self._create_action("恢复行")
         self.action_statistics = self._create_action("统计")
+        self.action_pivot = self._create_action("数据透视")
 
         for action in (
             self.action_new,
@@ -99,6 +102,7 @@ class MainWindow(QMainWindow):
         self.edit_menu.addAction(self.action_terminate_row)
         self.edit_menu.addAction(self.action_restore_row)
         self.edit_menu.addAction(self.action_statistics)
+        self.edit_menu.addAction(self.action_pivot)
 
     def _setup_toolbar(self) -> None:
         toolbar = QToolBar("主工具栏", self)
@@ -132,6 +136,7 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(self.action_column_settings)
         toolbar.addAction(self.action_statistics)
+        toolbar.addAction(self.action_pivot)
 
         spacer = QWidget(self)
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -162,6 +167,7 @@ class MainWindow(QMainWindow):
         self.action_terminate_row.triggered.connect(self._terminate_selected_rows)
         self.action_restore_row.triggered.connect(self._restore_selected_rows)
         self.action_statistics.triggered.connect(self._open_statistics_dialog)
+        self.action_pivot.triggered.connect(self._open_pivot_dialog)
         self.table_model.dirty_changed.connect(self._on_dirty_changed)
         self.table_view.selectionModel().currentChanged.connect(self._on_current_changed)
         self.table_view.horizontalHeader().customContextMenuRequested.connect(
@@ -301,6 +307,15 @@ class MainWindow(QMainWindow):
 
     def _open_statistics_dialog(self) -> None:
         dialog = StatisticsDialog(self.table_model.project, self)
+        dialog.exec()
+
+    def _open_pivot_dialog(self) -> None:
+        dialog = PivotDialog(
+            self.table_model.project,
+            self,
+            pivot_service=self.pivot_service,
+            import_export_service=self.import_export_service,
+        )
         dialog.exec()
 
     def _open_data_update_dialog(self) -> None:

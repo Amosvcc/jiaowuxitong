@@ -40,6 +40,7 @@ def test_main_window_initial_state() -> None:
         assert window.action_terminate_row.isEnabled()
         assert window.action_restore_row.isEnabled()
         assert window.action_statistics.isEnabled()
+        assert window.action_pivot.isEnabled()
         assert isinstance(window.search_bar, SearchBar)
         assert window.search_bar.search_input.placeholderText() == "搜索..."
         assert not window.search_bar.previous_button.isEnabled()
@@ -367,6 +368,57 @@ def test_main_window_statistics_does_not_change_dirty(monkeypatch) -> None:
 
     try:
         window._open_statistics_dialog()
+        app.processEvents()
+
+        assert window.table_model.project.dirty is False
+        assert not window.windowTitle().endswith("*")
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_pivot_action_opens_dialog(monkeypatch) -> None:
+    app = get_qapp()
+    window = MainWindow()
+    opened = {"count": 0, "project": None}
+
+    class FakeDialog:
+        def __init__(self, project, parent=None, **kwargs):
+            opened["count"] += 1
+            opened["project"] = project
+
+        def exec(self):
+            return 0
+
+    monkeypatch.setattr("app.ui.main_window.PivotDialog", FakeDialog)
+
+    try:
+        window.action_pivot.trigger()
+        app.processEvents()
+
+        assert opened["count"] == 1
+        assert opened["project"] is window.table_model.project
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_pivot_does_not_change_dirty(monkeypatch) -> None:
+    app = get_qapp()
+    window = MainWindow()
+    window.table_model.mark_clean()
+
+    class FakeDialog:
+        def __init__(self, project, parent=None, **kwargs):
+            self.project = project
+
+        def exec(self):
+            return 0
+
+    monkeypatch.setattr("app.ui.main_window.PivotDialog", FakeDialog)
+
+    try:
+        window._open_pivot_dialog()
         app.processEvents()
 
         assert window.table_model.project.dirty is False
