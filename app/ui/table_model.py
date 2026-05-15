@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
-from PySide6.QtGui import QBrush, QColor
+from PySide6.QtGui import QBrush, QColor, QFont
 
 from app.models import Project
 
@@ -20,6 +20,7 @@ class DataTableModel(QAbstractTableModel):
         self._search_match_set: set[tuple[int, int]] = set()
         self._search_brush = QBrush(QColor("#fff59d"))
         self._current_search_brush = QBrush(QColor("#ffcc80"))
+        self._current_search_foreground_brush = QBrush(QColor("#e65100"))
         self._terminated_row_brush = QBrush(QColor("#e0e0e0"))
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
@@ -49,6 +50,14 @@ class DataTableModel(QAbstractTableModel):
                 return self._search_brush
             if row.is_terminated:
                 return self._terminated_row_brush
+
+        if role == Qt.ForegroundRole and self.is_current_search_match(index):
+            return self._current_search_foreground_brush
+
+        if role == Qt.FontRole and self.is_current_search_match(index):
+            font = QFont()
+            font.setBold(True)
+            return font
 
         if role in (Qt.DisplayRole, Qt.EditRole):
             column = self.columns[index.column()]
@@ -163,6 +172,13 @@ class DataTableModel(QAbstractTableModel):
             affected_positions.add(self.search_matches[self.current_search_index])
         self._emit_search_updates(affected_positions)
 
+    def is_current_search_match(self, index: QModelIndex) -> bool:
+        if not index.isValid():
+            return False
+        if self.current_search_index < 0 or self.current_search_index >= len(self.search_matches):
+            return False
+        return (index.row(), index.column()) == self.search_matches[self.current_search_index]
+
     def refresh_column(self, column_index: int) -> None:
         self.headerDataChanged.emit(Qt.Orientation.Horizontal, column_index, column_index)
         if self.rowCount() == 0:
@@ -188,4 +204,4 @@ class DataTableModel(QAbstractTableModel):
     def _emit_search_updates(self, positions: set[tuple[int, int]]) -> None:
         for row_index, column_index in positions:
             index = self.index(row_index, column_index)
-            self.dataChanged.emit(index, index, [Qt.BackgroundRole])
+            self.dataChanged.emit(index, index, [Qt.BackgroundRole, Qt.ForegroundRole, Qt.FontRole])

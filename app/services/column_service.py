@@ -8,6 +8,31 @@ from app.models import Column, Project
 class ColumnService:
     VALID_FIELD_TYPES = {"text", "number", "date", "dropdown"}
 
+    def delete_columns(self, project: Project, column_indexes: list[int]) -> int:
+        valid_indexes = sorted(
+            {index for index in column_indexes if 0 <= index < len(project.columns)},
+            reverse=True,
+        )
+        if not valid_indexes:
+            return 0
+
+        deleted_column_ids: set[int] = set()
+        for column_index in valid_indexes:
+            column = project.columns.pop(column_index)
+            deleted_column_ids.add(column.id)
+
+        project.cells = {
+            key: cell
+            for key, cell in project.cells.items()
+            if key[1] not in deleted_column_ids
+        }
+        for order_index, column in enumerate(project.columns):
+            column.order_index = order_index
+
+        project.updated_at = datetime.now().isoformat(timespec="seconds")
+        project.dirty = True
+        return len(valid_indexes)
+
     def update_column(
         self,
         project: Project,

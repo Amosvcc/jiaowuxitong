@@ -1,12 +1,21 @@
 from __future__ import annotations
 
+from copy import copy
+
 from PySide6.QtCore import QSortFilterProxyModel
-from PySide6.QtWidgets import QComboBox, QStyledItemDelegate, QWidget
+from PySide6.QtWidgets import QComboBox, QStyle, QStyledItemDelegate, QWidget
 
 from app.ui.table_model import DataTableModel
 
 
 class DataColumnDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index) -> None:
+        model, source_index = self._source_model_and_index(index)
+        if model is not None and model.is_current_search_match(source_index):
+            option = copy(option)
+            option.state &= ~QStyle.StateFlag.State_Selected
+        super().paint(painter, option, index)
+
     def createEditor(self, parent: QWidget, option, index):
         model, source_index = self._source_model_and_index(index)
         if model is None:

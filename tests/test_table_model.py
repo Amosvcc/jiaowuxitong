@@ -118,6 +118,20 @@ def test_table_model_can_store_search_matches_and_highlight() -> None:
     assert isinstance(model.data(model.index(1, 1), Qt.ItemDataRole.BackgroundRole), QBrush)
 
 
+def test_table_model_current_search_match_has_orange_text_highlight() -> None:
+    model = DataTableModel()
+    model.set_search_matches([(0, 0), (1, 1)], 1)
+
+    current_brush = model.data(model.index(1, 1), Qt.ItemDataRole.ForegroundRole)
+    normal_brush = model.data(model.index(0, 0), Qt.ItemDataRole.ForegroundRole)
+    current_font = model.data(model.index(1, 1), Qt.ItemDataRole.FontRole)
+
+    assert isinstance(current_brush, QBrush)
+    assert current_brush.color().name().lower() == "#e65100"
+    assert normal_brush is None
+    assert current_font.bold() is True
+
+
 def test_table_model_clear_search_removes_matches() -> None:
     model = DataTableModel()
     model.set_search_matches([(0, 0)], 0)
