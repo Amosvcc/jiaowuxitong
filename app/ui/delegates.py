@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtWidgets import QComboBox, QStyledItemDelegate, QWidget
 
 from app.ui.table_model import DataTableModel
@@ -7,11 +8,11 @@ from app.ui.table_model import DataTableModel
 
 class DataColumnDelegate(QStyledItemDelegate):
     def createEditor(self, parent: QWidget, option, index):
-        model = index.model()
-        if not isinstance(model, DataTableModel):
+        model, source_index = self._source_model_and_index(index)
+        if model is None:
             return super().createEditor(parent, option, index)
 
-        column = model.columns[index.column()]
+        column = model.columns[source_index.column()]
         if column.field_type != "dropdown":
             return super().createEditor(parent, option, index)
 
@@ -25,12 +26,12 @@ class DataColumnDelegate(QStyledItemDelegate):
             super().setEditorData(editor, index)
             return
 
-        model = index.model()
-        if not isinstance(model, DataTableModel):
+        model, source_index = self._source_model_and_index(index)
+        if model is None:
             return
 
-        column = model.columns[index.column()]
-        current_value = str(model.data(index))
+        column = model.columns[source_index.column()]
+        current_value = str(model.data(source_index))
 
         if column.allow_custom_value:
             if current_value and editor.findText(current_value) == -1:
@@ -47,3 +48,11 @@ class DataColumnDelegate(QStyledItemDelegate):
             return
 
         model.setData(index, editor.currentText())
+
+    def _source_model_and_index(self, index):
+        model = index.model()
+        if isinstance(model, DataTableModel):
+            return model, index
+        if isinstance(model, QSortFilterProxyModel) and isinstance(model.sourceModel(), DataTableModel):
+            return model.sourceModel(), model.mapToSource(index)
+        return None, index

@@ -90,6 +90,16 @@ class DataTableModel(QAbstractTableModel):
         row_number = section + 1
         return f"[终止] {row_number}" if row.is_terminated else str(row_number)
 
+    def row_id_at(self, row_index: int) -> str:
+        if row_index < 0 or row_index >= len(self.rows):
+            raise IndexError("行索引超出范围")
+        return str(self.rows[row_index].id)
+
+    def column_id_at(self, column_index: int) -> str:
+        if column_index < 0 or column_index >= len(self.columns):
+            raise IndexError("列索引超出范围")
+        return str(self.columns[column_index].id)
+
     def add_empty_row(self) -> None:
         row_index = len(self.rows)
         self.beginInsertRows(QModelIndex(), row_index, row_index)

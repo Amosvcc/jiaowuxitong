@@ -1,5 +1,6 @@
 from app.models.cell import Cell
 from app.models.column import Column
+from app.models.filter_criteria import ColumnFilterCriteria, TableFilterState
 from app.models.pivot_result import PivotResult
 from app.models.project import Project
 from app.models.row import Row
@@ -10,6 +11,7 @@ from app.models.update_result import DataUpdateResult
 __all__ = [
     "Cell",
     "Column",
+    "ColumnFilterCriteria",
     "DataUpdateAction",
     "DataUpdateDetail",
     "DataUpdateResult",
@@ -17,4 +19,5 @@ __all__ = [
     "Project",
     "Row",
     "StatisticsItem",
+    "TableFilterState",
 ]

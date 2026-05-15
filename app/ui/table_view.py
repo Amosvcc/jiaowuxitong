@@ -24,10 +24,23 @@ class DataTableView(QTableView):
         vertical_header = self.verticalHeader()
         vertical_header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
-    def show_header_menu(self, global_position, column_settings_callback) -> None:
+    def show_header_menu(
+        self,
+        global_position,
+        column_settings_callback,
+        column_filter_callback=None,
+        clear_column_filter_callback=None,
+    ) -> None:
         menu = QMenu(self)
+        column_filter_action = menu.addAction("筛选此列")
+        clear_column_filter_action = menu.addAction("清除当前列筛选")
+        menu.addSeparator()
         column_settings_action = menu.addAction("列设置")
         chosen_action = menu.exec(global_position)
+        if chosen_action == column_filter_action and column_filter_callback is not None:
+            column_filter_callback()
+        if chosen_action == clear_column_filter_action and clear_column_filter_callback is not None:
+            clear_column_filter_callback()
         if chosen_action == column_settings_action:
             column_settings_callback()
 

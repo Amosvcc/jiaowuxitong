@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from app.services import (
     ColumnService,
     DataUpdateService,
+    FilterService,
     ImportExportService,
     PivotService,
     ProjectService,
@@ -26,7 +27,14 @@ from app.services import (
     SearchService,
 )
 from app.ui.delegates import DataColumnDelegate
-from app.ui.dialogs import ColumnSettingsDialog, DataUpdateDialog, PivotDialog, StatisticsDialog
+from app.ui.dialogs import (
+    ColumnFilterDialog,
+    ColumnSettingsDialog,
+    DataUpdateDialog,
+    PivotDialog,
+    StatisticsDialog,
+)
+from app.ui.models import TableFilterProxyModel
 from app.ui.table_model import DataTableModel
 from app.ui.table_view import DataTableView
 from app.ui.widgets import SearchBar
@@ -42,7 +50,10 @@ class MainWindow(QMainWindow):
         self.column_service = ColumnService()
         self.row_service = RowService()
         self.pivot_service = PivotService()
-        self.table_model = DataTableModel()
+        self.filter_service = FilterService()
+        self.source_table_model = DataTableModel()
+        self.table_model = TableFilterProxyModel(filter_service=self.filter_service)
+        self.table_model.setSourceModel(self.source_table_model)
         self.table_view = DataTableView(self)
         self.table_view.setModel(self.table_model)
         self.column_delegate = DataColumnDelegate(self.table_view)
@@ -51,6 +62,7 @@ class MainWindow(QMainWindow):
         self.row_count_label = QLabel()
         self.column_count_label = QLabel()
         self.current_cell_label = QLabel()
+        self.filter_status_label = QLabel()
         self.search_status_label = QLabel()
 
         self.resize(1200, 800)
@@ -86,6 +98,7 @@ class MainWindow(QMainWindow):
         self.action_restore_row = self._create_action("恢复行")
         self.action_statistics = self._create_action("统计")
         self.action_pivot = self._create_action("数据透视")
+        self.action_clear_all_filters = self._create_action("清除全部筛选")
 
         for action in (
             self.action_new,
@@ -101,6 +114,7 @@ class MainWindow(QMainWindow):
         self.edit_menu.addAction(self.action_column_settings)
         self.edit_menu.addAction(self.action_terminate_row)
         self.edit_menu.addAction(self.action_restore_row)
+        self.edit_menu.addAction(self.action_clear_all_filters)
         self.edit_menu.addAction(self.action_statistics)
         self.edit_menu.addAction(self.action_pivot)
 
@@ -135,6 +149,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
         toolbar.addAction(self.action_column_settings)
+        toolbar.addAction(self.action_clear_all_filters)
         toolbar.addAction(self.action_statistics)
         toolbar.addAction(self.action_pivot)
 
@@ -149,6 +164,7 @@ class MainWindow(QMainWindow):
         status_bar.addPermanentWidget(self.row_count_label)
         status_bar.addPermanentWidget(self.column_count_label)
         status_bar.addPermanentWidget(self.current_cell_label, 1)
+        status_bar.addPermanentWidget(self.filter_status_label)
         status_bar.addPermanentWidget(self.search_status_label)
 
     def _connect_signals(self) -> None:
@@ -166,9 +182,10 @@ class MainWindow(QMainWindow):
         self.action_column_settings.triggered.connect(self._open_selected_column_settings)
         self.action_terminate_row.triggered.connect(self._terminate_selected_rows)
         self.action_restore_row.triggered.connect(self._restore_selected_rows)
+        self.action_clear_all_filters.triggered.connect(self._clear_all_filters)
         self.action_statistics.triggered.connect(self._open_statistics_dialog)
         self.action_pivot.triggered.connect(self._open_pivot_dialog)
-        self.table_model.dirty_changed.connect(self._on_dirty_changed)
+        self.source_table_model.dirty_changed.connect(self._on_dirty_changed)
         self.table_view.selectionModel().currentChanged.connect(self._on_current_changed)
         self.table_view.horizontalHeader().customContextMenuRequested.connect(
             self._show_column_header_menu
@@ -354,6 +371,8 @@ class MainWindow(QMainWindow):
         self.table_view.show_header_menu(
             global_position,
             lambda: self._open_column_settings_for_index(column_index),
+            lambda: self._open_column_filter_dialog(column_index),
+            lambda: self._clear_column_filter(column_index),
         )
 
     def _show_row_header_menu(self, position) -> None:
@@ -375,7 +394,11 @@ class MainWindow(QMainWindow):
         return 0
 
     def _selected_row_indexes(self) -> list[int]:
-        selected_rows = {index.row() for index in self.table_view.selectionModel().selectedIndexes()}
+        selected_rows = {
+            self.table_model.mapToSource(index).row()
+            for index in self.table_view.selectionModel().selectedIndexes()
+            if index.isValid() and self.table_model.mapToSource(index).isValid()
+        }
         return sorted(selected_rows)
 
     def _terminate_selected_rows(self) -> None:
@@ -387,8 +410,10 @@ class MainWindow(QMainWindow):
         if affected_rows == 0:
             return
         self.table_model.refresh_rows(row_indexes)
+        self._perform_search(self.search_bar.keyword())
         self.table_model.mark_dirty()
         self._update_window_title()
+        self._update_status_labels()
         self.statusBar().showMessage(f"已终止 {affected_rows} 行", 5000)
 
     def _restore_selected_rows(self) -> None:
@@ -400,9 +425,54 @@ class MainWindow(QMainWindow):
         if affected_rows == 0:
             return
         self.table_model.refresh_rows(row_indexes)
+        self._perform_search(self.search_bar.keyword())
         self.table_model.mark_dirty()
         self._update_window_title()
+        self._update_status_labels()
         self.statusBar().showMessage(f"已恢复 {affected_rows} 行", 5000)
+
+    def _open_column_filter_dialog(self, column_index: int) -> None:
+        if column_index < 0 or column_index >= self.table_model.columnCount():
+            return
+
+        column = self.source_table_model.columns[column_index]
+        column_id = str(column.id)
+        unique_values = self.filter_service.get_unique_values(
+            self.source_table_model.project,
+            column_id,
+            include_terminated_rows=True,
+        )
+        current_criteria = self.table_model.filter_state.filters.get(column_id)
+        dialog = ColumnFilterDialog(
+            column_id=column_id,
+            column_name=column.name,
+            unique_values=unique_values,
+            current_criteria=current_criteria,
+            parent=self,
+        )
+        if dialog.exec() != ColumnFilterDialog.DialogCode.Accepted:
+            return
+
+        if dialog.is_cleared:
+            self.table_model.clear_column_filter(column_id)
+        else:
+            self.table_model.set_column_filter(dialog.get_criteria())
+        self._after_filter_changed()
+
+    def _clear_column_filter(self, column_index: int) -> None:
+        if column_index < 0 or column_index >= self.table_model.columnCount():
+            return
+        self.table_model.clear_column_filter(self.source_table_model.column_id_at(column_index))
+        self._after_filter_changed()
+
+    def _clear_all_filters(self) -> None:
+        self.table_model.clear_filters()
+        self._after_filter_changed()
+        self.statusBar().showMessage("已清除全部筛选", 5000)
+
+    def _after_filter_changed(self) -> None:
+        self._perform_search(self.search_bar.keyword())
+        self._update_status_labels()
 
     def _open_column_settings_for_index(self, column_index: int) -> None:
         if column_index < 0 or column_index >= self.table_model.columnCount():
@@ -432,6 +502,7 @@ class MainWindow(QMainWindow):
     def _perform_search(self, keyword: str | None = None) -> None:
         search_keyword = self.search_bar.keyword() if keyword is None else keyword
         matches = self.search_service.search(self.table_model.project, search_keyword)
+        matches = self._visible_search_matches(matches)
         if not matches:
             self.table_model.clear_search()
             self.search_bar.set_navigation_enabled(False)
@@ -460,10 +531,21 @@ class MainWindow(QMainWindow):
     def _focus_search_match(self, match_index: int) -> None:
         self.table_model.set_current_search_index(match_index)
         row_index, column_index = self.table_model.search_matches[match_index]
-        model_index = self.table_model.index(row_index, column_index)
+        source_index = self.source_table_model.index(row_index, column_index)
+        model_index = self.table_model.mapFromSource(source_index)
+        if not model_index.isValid():
+            return
         self.table_view.setCurrentIndex(model_index)
         self.table_view.scrollTo(model_index, DataTableView.ScrollHint.PositionAtCenter)
         self._update_search_status()
+
+    def _visible_search_matches(self, matches: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        visible_matches: list[tuple[int, int]] = []
+        for row_index, column_index in matches:
+            source_index = self.source_table_model.index(row_index, column_index)
+            if self.table_model.mapFromSource(source_index).isValid():
+                visible_matches.append((row_index, column_index))
+        return visible_matches
 
     def _clear_search(self) -> None:
         self.table_model.clear_search()
@@ -510,9 +592,14 @@ class MainWindow(QMainWindow):
 
     def _update_status_labels(self) -> None:
         row_count = self.table_model.rowCount()
+        total_row_count = self.source_table_model.rowCount()
         column_count = self.table_model.columnCount()
         self.row_count_label.setText(f"行数：{row_count}")
         self.column_count_label.setText(f"列数：{column_count}")
+        if self.table_model.filter_state.is_active:
+            self.filter_status_label.setText(f"已筛选：显示 {row_count} / {total_row_count} 行")
+        else:
+            self.filter_status_label.clear()
 
         index = self.table_view.currentIndex()
         if index.isValid():
