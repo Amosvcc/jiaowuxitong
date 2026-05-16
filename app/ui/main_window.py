@@ -3,8 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QLabel,
     QMainWindow,
@@ -17,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import last_file_dialog_dir, remember_file_dialog_path
+from app.core import last_file_dialog_dir, remember_file_dialog_path, resource_path
 from app.services import (
     ColumnService,
     DataUpdateService,
@@ -71,6 +73,7 @@ class MainWindow(QMainWindow):
         self.search_status_label = QLabel()
 
         self.resize(1200, 800)
+        self._setup_window_icon()
         self._setup_ui()
         self._setup_menu_bar()
         self._setup_toolbar()
@@ -86,10 +89,15 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.table_view)
         self.setCentralWidget(central_widget)
 
+    def _setup_window_icon(self) -> None:
+        icon_path = resource_path("icon.png")
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+
     def _setup_menu_bar(self) -> None:
         self.file_menu = self.menuBar().addMenu("文件")
         self.edit_menu = self.menuBar().addMenu("编辑")
-        self.menuBar().addMenu("帮助")
+        self.help_menu = self.menuBar().addMenu("帮助")
 
         self.action_new = self._create_action("新建")
         self.action_open = self._create_action("打开")
@@ -106,6 +114,9 @@ class MainWindow(QMainWindow):
         self.action_statistics = self._create_action("统计")
         self.action_pivot = self._create_action("数据透视")
         self.action_clear_all_filters = self._create_action("清除全部筛选")
+        self.action_about = self._create_action("ZY专用")
+        if not self.windowIcon().isNull():
+            self.action_about.setIcon(self.windowIcon())
 
         for action in (
             self.action_new,
@@ -125,6 +136,7 @@ class MainWindow(QMainWindow):
         self.edit_menu.addAction(self.action_clear_all_filters)
         self.edit_menu.addAction(self.action_statistics)
         self.edit_menu.addAction(self.action_pivot)
+        self.help_menu.addAction(self.action_about)
 
     def _setup_toolbar(self) -> None:
         toolbar = QToolBar("主工具栏", self)
@@ -206,6 +218,7 @@ class MainWindow(QMainWindow):
         self.action_clear_all_filters.triggered.connect(self._clear_all_filters)
         self.action_statistics.triggered.connect(self._open_statistics_dialog)
         self.action_pivot.triggered.connect(self._open_pivot_dialog)
+        self.action_about.triggered.connect(self._show_about_dialog)
         self.source_table_model.dirty_changed.connect(self._on_dirty_changed)
         self.table_view.selectionModel().currentChanged.connect(self._on_current_changed)
         self.table_view.horizontalHeader().customContextMenuRequested.connect(
@@ -371,6 +384,27 @@ class MainWindow(QMainWindow):
             pivot_service=self.pivot_service,
             import_export_service=self.import_export_service,
         )
+        dialog.exec()
+
+    def _show_about_dialog(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("帮助")
+        layout = QVBoxLayout(dialog)
+
+        icon_label = QLabel(dialog)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if not self.windowIcon().isNull():
+            icon_label.setPixmap(self.windowIcon().pixmap(128, 128))
+        layout.addWidget(icon_label)
+
+        text_label = QLabel("ZY专用分析软件V1.0", dialog)
+        text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(text_label)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok, parent=dialog)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+
         dialog.exec()
 
     def _open_data_update_dialog(self) -> None:
