@@ -91,7 +91,7 @@ def test_dialog_shows_default_options() -> None:
         assert dialog.overwrite_existing_checkbox.isChecked() is False
         assert dialog.ignore_empty_values_checkbox.isChecked() is True
         assert dialog.add_missing_columns_checkbox.isChecked() is True
-        assert dialog.append_unmatched_rows_checkbox.isChecked() is False
+        assert dialog.append_unmatched_rows_checkbox.isChecked() is True
         assert dialog.update_terminated_rows_checkbox.isChecked() is False
     finally:
         dialog.close()

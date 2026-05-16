@@ -107,7 +107,7 @@ class DataUpdateDialog(QDialog):
         self.overwrite_existing_checkbox.setChecked(False)
         self.ignore_empty_values_checkbox.setChecked(True)
         self.add_missing_columns_checkbox.setChecked(True)
-        self.append_unmatched_rows_checkbox.setChecked(False)
+        self.append_unmatched_rows_checkbox.setChecked(True)
         self.update_terminated_rows_checkbox.setChecked(False)
 
     def _connect_signals(self) -> None:
