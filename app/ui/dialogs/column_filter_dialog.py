@@ -40,6 +40,7 @@ class ColumnFilterDialog(QDialog):
         self.value_list = QListWidget(self)
         self.select_all_button = QPushButton("全选", self)
         self.select_none_button = QPushButton("全不选", self)
+        self.invert_selection_button = QPushButton("反选", self)
         self.clear_button = QPushButton("清除当前列筛选", self)
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -87,6 +88,7 @@ class ColumnFilterDialog(QDialog):
         action_layout = QHBoxLayout()
         action_layout.addWidget(self.select_all_button)
         action_layout.addWidget(self.select_none_button)
+        action_layout.addWidget(self.invert_selection_button)
         action_layout.addStretch(1)
         action_layout.addWidget(self.clear_button)
         layout.addLayout(action_layout)
@@ -114,6 +116,7 @@ class ColumnFilterDialog(QDialog):
         self.search_input.textChanged.connect(self._filter_visible_items)
         self.select_all_button.clicked.connect(lambda: self._set_all_visible_checked(True))
         self.select_none_button.clicked.connect(lambda: self._set_all_visible_checked(False))
+        self.invert_selection_button.clicked.connect(self._invert_visible_checked)
         self.clear_button.clicked.connect(self.clear_current_filter)
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
@@ -132,3 +135,15 @@ class ColumnFilterDialog(QDialog):
             item = self.value_list.item(index)
             if not item.isHidden():
                 item.setCheckState(state)
+
+    def _invert_visible_checked(self) -> None:
+        for index in range(self.value_list.count()):
+            item = self.value_list.item(index)
+            if item.isHidden():
+                continue
+            next_state = (
+                Qt.CheckState.Unchecked
+                if item.checkState() == Qt.CheckState.Checked
+                else Qt.CheckState.Checked
+            )
+            item.setCheckState(next_state)

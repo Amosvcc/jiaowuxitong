@@ -211,6 +211,9 @@ class MainWindow(QMainWindow):
         self.table_view.horizontalHeader().customContextMenuRequested.connect(
             self._show_column_header_menu
         )
+        self.table_view.horizontalHeader().filter_indicator_clicked.connect(
+            self._open_column_filter_dialog
+        )
         self.table_view.verticalHeader().customContextMenuRequested.connect(
             self._show_row_header_menu
         )

@@ -1,12 +1,68 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, QRect, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QPainter, QPolygon
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QMenu, QTableView
+
+
+class FilterHeaderView(QHeaderView):
+    filter_indicator_clicked = Signal(int)
+    INDICATOR_WIDTH = 20
+
+    def __init__(self, orientation: Qt.Orientation, parent=None) -> None:
+        super().__init__(orientation, parent)
+        self.setSectionsClickable(True)
+
+    def paintSection(self, painter: QPainter, rect: QRect, logical_index: int) -> None:
+        super().paintSection(painter, rect, logical_index)
+        if not rect.isValid() or self.orientation() != Qt.Orientation.Horizontal:
+            return
+
+        indicator_rect = self.indicator_rect(rect)
+        center = indicator_rect.center()
+        triangle = QPolygon(
+            [
+                QPoint(center.x() - 4, center.y() - 2),
+                QPoint(center.x() + 4, center.y() - 2),
+                QPoint(center.x(), center.y() + 3),
+            ]
+        )
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor("#555555")))
+        painter.drawPolygon(triangle)
+        painter.restore()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            logical_index = self.logicalIndexAt(event.position().toPoint())
+            if logical_index >= 0 and self._is_indicator_position(logical_index, event.position().toPoint()):
+                self.filter_indicator_clicked.emit(logical_index)
+                return
+        super().mouseReleaseEvent(event)
+
+    def indicator_rect(self, section_rect: QRect) -> QRect:
+        return QRect(
+            section_rect.right() - self.INDICATOR_WIDTH + 1,
+            section_rect.top(),
+            self.INDICATOR_WIDTH,
+            section_rect.height(),
+        )
+
+    def _is_indicator_position(self, logical_index: int, position: QPoint) -> bool:
+        section_rect = QRect(
+            self.sectionViewportPosition(logical_index),
+            0,
+            self.sectionSize(logical_index),
+            self.height(),
+        )
+        return self.indicator_rect(section_rect).contains(position)
 
 
 class DataTableView(QTableView):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.setHorizontalHeader(FilterHeaderView(Qt.Orientation.Horizontal, self))
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)

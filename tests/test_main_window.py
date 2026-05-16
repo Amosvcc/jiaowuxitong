@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from app.models import ColumnFilterCriteria, Project
 from app.ui.main_window import MainWindow
-from app.ui.table_view import DataTableView
+from app.ui.table_view import DataTableView, FilterHeaderView
 from app.ui.widgets import SearchBar
 
 
@@ -24,6 +24,7 @@ def test_main_window_initial_state() -> None:
         assert window.size().width() == 1200
         assert window.size().height() == 800
         assert isinstance(window.table_view, DataTableView)
+        assert isinstance(window.table_view.horizontalHeader(), FilterHeaderView)
         assert window.table_view.model() is window.table_model
         assert window.row_count_label.text() == "行数：10"
         assert window.column_count_label.text() == "列数：5"
@@ -51,6 +52,22 @@ def test_main_window_initial_state() -> None:
         assert not window.search_bar.previous_button.isEnabled()
         assert not window.search_bar.next_button.isEnabled()
         assert window.action_delete.isEnabled()
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_header_filter_indicator_opens_column_filter(monkeypatch) -> None:
+    app = get_qapp()
+    window = MainWindow()
+    opened_columns: list[int] = []
+    monkeypatch.setattr(window, "_open_column_filter_dialog", opened_columns.append)
+
+    try:
+        window.table_view.horizontalHeader().filter_indicator_clicked.emit(2)
+        app.processEvents()
+
+        assert opened_columns == [2]
     finally:
         window.close()
         app.processEvents()

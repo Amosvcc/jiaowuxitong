@@ -82,6 +82,31 @@ def test_dialog_generates_criteria_from_checked_values() -> None:
     )
 
 
+def test_dialog_can_invert_visible_checked_values() -> None:
+    dialog = make_dialog()
+    first_item = dialog.value_list.item(0)
+    first_item.setCheckState(Qt.CheckState.Unchecked)
+
+    dialog.invert_selection_button.click()
+
+    assert first_item.checkState() == Qt.CheckState.Checked
+    assert all(
+        dialog.value_list.item(index).checkState() == Qt.CheckState.Unchecked
+        for index in range(1, dialog.value_list.count())
+    )
+
+
+def test_dialog_invert_only_affects_visible_values() -> None:
+    dialog = make_dialog()
+    hidden_item = dialog.value_list.item(1)
+    hidden_item.setHidden(True)
+    hidden_item.setCheckState(Qt.CheckState.Checked)
+
+    dialog.invert_selection_button.click()
+
+    assert hidden_item.checkState() == Qt.CheckState.Checked
+
+
 def test_dialog_clear_current_filter_accepts_as_cleared() -> None:
     dialog = make_dialog(ColumnFilterCriteria(column_id="1", selected_values={"会计"}))
 
