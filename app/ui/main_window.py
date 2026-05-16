@@ -753,7 +753,7 @@ class MainWindow(QMainWindow):
         project = self.table_model.project
         project_label = Path(project.file_path).name if project.file_path else project.name
         dirty_suffix = " *" if project.dirty else ""
-        self.setWindowTitle(f"数据分析软件 V1.0 - {project_label}{dirty_suffix}")
+        self.setWindowTitle(f"ZY专用 V1.0 - {project_label}{dirty_suffix}")
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._confirm_save_if_needed():
