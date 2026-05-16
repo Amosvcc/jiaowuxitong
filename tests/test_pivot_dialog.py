@@ -83,9 +83,10 @@ def test_pivot_dialog_has_correct_default_options() -> None:
 
     try:
         assert dialog.expand_tags_checkbox.isChecked() is False
+        assert dialog.tag_separators_input.isEnabled() is False
         assert dialog.ignore_empty_row_checkbox.isChecked() is True
         assert dialog.ignore_empty_column_checkbox.isChecked() is True
-        assert dialog.include_terminated_rows_checkbox.isChecked() is False
+        assert dialog.include_terminated_rows_checkbox.isChecked() is True
         assert dialog.show_row_totals_checkbox.isChecked() is True
         assert dialog.show_column_totals_checkbox.isChecked() is True
         assert dialog.generate_button.isEnabled() is False
@@ -129,6 +130,33 @@ def test_pivot_dialog_generate_calls_pivot_service() -> None:
         assert called["args"][0] is project
         assert called["kwargs"]["row_field"] == "班级"
         assert called["kwargs"]["column_field"] == "性别"
+    finally:
+        dialog.close()
+        app.processEvents()
+
+
+def test_pivot_dialog_passes_expand_tag_options_to_pivot_service() -> None:
+    app = get_qapp()
+    called = {}
+
+    class FakePivotService:
+        def build_pivot(self, *args, **kwargs):
+            called["kwargs"] = kwargs
+            return build_result()
+
+    dialog = PivotDialog(build_project(), pivot_service=FakePivotService())
+    dialog.row_field_combo.setCurrentText("班级")
+    dialog.column_field_combo.setCurrentText("性别")
+    dialog.expand_tags_checkbox.setChecked(True)
+    dialog.tag_separators_input.setText(";|\\n")
+
+    try:
+        dialog.generate_pivot()
+        app.processEvents()
+
+        assert dialog.tag_separators_input.isEnabled() is True
+        assert called["kwargs"]["expand_column_tags"] is True
+        assert called["kwargs"]["tag_separators"] == [";", "|", "\n"]
     finally:
         dialog.close()
         app.processEvents()

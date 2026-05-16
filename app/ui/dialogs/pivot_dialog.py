@@ -103,16 +103,19 @@ class PivotDialog(QDialog):
     def _load_default_options(self) -> None:
         self.expand_tags_checkbox.setChecked(False)
         self.tag_separators_input.setText(";；,，、/|\\n")
+        self.tag_separators_input.setPlaceholderText(";；,，、/|\\n")
         self.ignore_empty_row_checkbox.setChecked(True)
         self.ignore_empty_column_checkbox.setChecked(True)
-        self.include_terminated_rows_checkbox.setChecked(False)
+        self.include_terminated_rows_checkbox.setChecked(True)
         self.show_row_totals_checkbox.setChecked(True)
         self.show_column_totals_checkbox.setChecked(True)
         self.export_button.setEnabled(False)
+        self._update_tag_separator_state()
 
     def _connect_signals(self) -> None:
         self.row_field_combo.currentIndexChanged.connect(self._update_generate_button)
         self.column_field_combo.currentIndexChanged.connect(self._update_generate_button)
+        self.expand_tags_checkbox.toggled.connect(self._update_tag_separator_state)
         self.generate_button.clicked.connect(self.generate_pivot)
         self.export_button.clicked.connect(self.export_pivot)
         self.close_button.clicked.connect(self.close)
@@ -176,6 +179,9 @@ class PivotDialog(QDialog):
 
     def _update_generate_button(self) -> None:
         self.generate_button.setEnabled(self.can_generate())
+
+    def _update_tag_separator_state(self) -> None:
+        self.tag_separators_input.setEnabled(self.expand_tags_checkbox.isChecked())
 
     def _parse_tag_separators(self) -> list[str]:
         text = self.tag_separators_input.text()
