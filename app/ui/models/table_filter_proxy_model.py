@@ -17,6 +17,8 @@ class TableFilterProxyModel(QSortFilterProxyModel):
         super().__init__(parent)
         self.filter_service = filter_service or FilterService()
         self.filter_state = TableFilterState()
+        self._row_status_filter = "all"
+        self._compiled_column_filters: list[tuple[int, set[str], bool]] = []
         self.setDynamicSortFilter(True)
 
     @property
@@ -53,6 +55,7 @@ class TableFilterProxyModel(QSortFilterProxyModel):
     def load_project(self, project) -> None:
         self.clear_filters()
         self.source_table_model.load_project(project)
+        self._rebuild_filter_cache()
 
     def add_empty_row(self, after_row_index: int | None = None) -> None:
         self.source_table_model.add_empty_row(after_row_index)
@@ -60,6 +63,7 @@ class TableFilterProxyModel(QSortFilterProxyModel):
 
     def add_empty_column(self, after_column_index: int | None = None) -> None:
         self.source_table_model.add_empty_column(after_column_index)
+        self._rebuild_filter_cache()
         self._invalidate_rows_filter()
 
     def mark_dirty(self) -> None:
@@ -80,6 +84,7 @@ class TableFilterProxyModel(QSortFilterProxyModel):
     def refresh_column(self, column_index: int) -> None:
         self.source_table_model.refresh_column(column_index)
         self.headerDataChanged.emit(Qt.Orientation.Horizontal, column_index, column_index)
+        self._rebuild_filter_cache()
         self._invalidate_rows_filter()
 
     def refresh_rows(self, row_indexes: list[int]) -> None:
@@ -95,6 +100,7 @@ class TableFilterProxyModel(QSortFilterProxyModel):
 
     def set_filter_state(self, filter_state: TableFilterState) -> None:
         self.filter_state = filter_state
+        self._rebuild_filter_cache()
         self._invalidate_rows_filter()
         if self.columnCount() > 0:
             self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, self.columnCount() - 1)
@@ -104,6 +110,7 @@ class TableFilterProxyModel(QSortFilterProxyModel):
             self.filter_state.filters[str(criteria.column_id)] = criteria
         else:
             self.filter_state.filters.pop(str(criteria.column_id), None)
+        self._rebuild_filter_cache()
         self._invalidate_rows_filter()
         column_index = self._column_index_for_id(criteria.column_id)
         if column_index >= 0:
@@ -111,6 +118,7 @@ class TableFilterProxyModel(QSortFilterProxyModel):
 
     def clear_column_filter(self, column_id: str) -> None:
         self.filter_state.filters.pop(str(column_id), None)
+        self._rebuild_filter_cache()
         self._invalidate_rows_filter()
         column_index = self._column_index_for_id(column_id)
         if column_index >= 0:
@@ -123,25 +131,44 @@ class TableFilterProxyModel(QSortFilterProxyModel):
         if row_status not in {"all", "terminated", "active"}:
             raise ValueError("不支持的行状态筛选")
         self.filter_state.row_status = row_status
+        self._rebuild_filter_cache()
         self._invalidate_rows_filter()
 
     def clear_filters(self) -> None:
         self.filter_state = TableFilterState()
+        self._rebuild_filter_cache()
         self._invalidate_rows_filter()
         if self.columnCount() > 0:
             self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, self.columnCount() - 1)
 
     def refresh_filter(self) -> None:
+        self._rebuild_filter_cache()
         self._invalidate_rows_filter()
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
         source_model = self.source_table_model
-        row_id = source_model.row_id_at(source_row)
-        return self.filter_service.row_matches_filters(
-            source_model.project,
-            row_id,
-            self.filter_state,
-        )
+        if not self.filter_state.is_active:
+            return True
+        if source_parent.isValid() or source_row < 0 or source_row >= len(source_model.rows):
+            return False
+
+        row = source_model.rows[source_row]
+        if self._row_status_filter == "terminated" and not row.is_terminated:
+            return False
+        if self._row_status_filter == "active" and row.is_terminated:
+            return False
+
+        cells = source_model.cells
+        for column_id, selected_values, include_blank in self._compiled_column_filters:
+            cell = cells.get((row.id, column_id))
+            value = "" if cell is None else cell.value
+            if value == "":
+                if not include_blank:
+                    return False
+                continue
+            if value not in selected_values:
+                return False
+        return True
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
         value = super().headerData(section, orientation, role)
@@ -158,6 +185,23 @@ class TableFilterProxyModel(QSortFilterProxyModel):
             if str(column.id) == str(column_id):
                 return index
         return -1
+
+    def _rebuild_filter_cache(self) -> None:
+        self._row_status_filter = self.filter_state.row_status
+        column_ids_by_string = {
+            str(column.id): column.id for column in self.source_table_model.columns
+        }
+        compiled_filters: list[tuple[int, set[str], bool]] = []
+        for criteria in self.filter_state.filters.values():
+            if not criteria.is_active:
+                continue
+            column_id = column_ids_by_string.get(str(criteria.column_id))
+            if column_id is None:
+                continue
+            compiled_filters.append(
+                (column_id, set(criteria.selected_values), criteria.include_blank)
+            )
+        self._compiled_column_filters = compiled_filters
 
     def _invalidate_rows_filter(self) -> None:
         self.beginFilterChange()

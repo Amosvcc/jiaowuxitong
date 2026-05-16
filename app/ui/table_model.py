@@ -210,14 +210,28 @@ class DataTableModel(QAbstractTableModel):
         if not valid_indexes:
             return
         self.headerDataChanged.emit(Qt.Orientation.Vertical, valid_indexes[0], valid_indexes[-1])
-        for row_index in valid_indexes:
-            top_index = self.index(row_index, 0)
-            bottom_index = self.index(row_index, max(self.columnCount() - 1, 0))
-            self.dataChanged.emit(
-                top_index,
-                bottom_index,
-                [Qt.DisplayRole, Qt.EditRole, Qt.BackgroundRole],
-            )
+        last_column_index = max(self.columnCount() - 1, 0)
+        range_start = valid_indexes[0]
+        previous_index = valid_indexes[0]
+
+        for row_index in valid_indexes[1:]:
+            if row_index == previous_index + 1:
+                previous_index = row_index
+                continue
+            self._emit_rows_data_changed(range_start, previous_index, last_column_index)
+            range_start = row_index
+            previous_index = row_index
+
+        self._emit_rows_data_changed(range_start, previous_index, last_column_index)
+
+    def _emit_rows_data_changed(self, first_row: int, last_row: int, last_column_index: int) -> None:
+        top_index = self.index(first_row, 0)
+        bottom_index = self.index(last_row, last_column_index)
+        self.dataChanged.emit(
+            top_index,
+            bottom_index,
+            [Qt.DisplayRole, Qt.EditRole, Qt.BackgroundRole],
+        )
 
     def _emit_search_updates(self, positions: set[tuple[int, int]]) -> None:
         for row_index, column_index in positions:
