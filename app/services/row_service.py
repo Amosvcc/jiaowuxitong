@@ -31,11 +31,25 @@ class RowService:
         project.dirty = True
         return len(valid_indexes)
 
-    def terminate_rows(self, project: Project, row_indexes: list[int]) -> int:
-        return self._set_rows_terminated_state(project, row_indexes, is_terminated=True)
+    def terminate_rows(
+        self,
+        project: Project,
+        row_indexes: list[int],
+        terminated_column_index: int | None = None,
+    ) -> int:
+        return self._set_rows_terminated_state(
+            project,
+            row_indexes,
+            is_terminated=True,
+            terminated_column_index=terminated_column_index,
+        )
 
     def restore_rows(self, project: Project, row_indexes: list[int]) -> int:
-        return self._set_rows_terminated_state(project, row_indexes, is_terminated=False)
+        return self._set_rows_terminated_state(
+            project,
+            row_indexes,
+            is_terminated=False,
+        )
 
     def _set_rows_terminated_state(
         self,
@@ -43,19 +57,28 @@ class RowService:
         row_indexes: list[int],
         *,
         is_terminated: bool,
+        terminated_column_index: int | None = None,
     ) -> int:
         affected_rows = 0
         timestamp = datetime.now().isoformat(timespec="seconds")
         valid_indexes = sorted({index for index in row_indexes if 0 <= index < len(project.rows)})
         if not valid_indexes:
             return 0
+        terminated_column_id = self._column_id_at(project, terminated_column_index)
 
         for row_index in valid_indexes:
             row = project.rows[row_index]
             row.is_terminated = is_terminated
             row.terminated_at = timestamp if is_terminated else None
+            row.terminated_column_id = terminated_column_id if is_terminated else None
             affected_rows += 1
 
         project.updated_at = timestamp
         project.dirty = True
         return affected_rows
+
+    @staticmethod
+    def _column_id_at(project: Project, column_index: int | None) -> int | None:
+        if column_index is None or column_index < 0 or column_index >= len(project.columns):
+            return None
+        return project.columns[column_index].id

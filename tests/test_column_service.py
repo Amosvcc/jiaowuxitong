@@ -109,6 +109,16 @@ def test_column_service_deletes_columns_and_cells() -> None:
     assert project.dirty is True
 
 
+def test_column_service_clears_deleted_terminated_column_marker() -> None:
+    project = Project.create_empty(row_count=1, column_count=2)
+    project.rows[0].is_terminated = True
+    project.rows[0].terminated_column_id = project.columns[1].id
+
+    ColumnService().delete_columns(project, [1])
+
+    assert project.rows[0].terminated_column_id is None
+
+
 def test_column_service_delete_ignores_invalid_indexes() -> None:
     project = Project.create_empty(row_count=1, column_count=1)
 

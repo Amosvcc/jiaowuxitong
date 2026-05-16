@@ -17,8 +17,8 @@ class RowRepository:
         connection.executemany(
             """
             INSERT INTO rows (
-                id, order_index, is_terminated, terminated_at, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                id, order_index, is_terminated, terminated_at, terminated_column_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -26,6 +26,7 @@ class RowRepository:
                     row.order_index,
                     1 if row.is_terminated else 0,
                     row.terminated_at,
+                    row.terminated_column_id,
                     timestamp,
                     timestamp,
                 )
@@ -36,7 +37,7 @@ class RowRepository:
     def load_all(self, connection: sqlite3.Connection) -> list[Row]:
         rows = connection.execute(
             """
-            SELECT id, order_index, is_terminated, terminated_at
+            SELECT id, order_index, is_terminated, terminated_at, terminated_column_id
             FROM rows
             ORDER BY order_index
             """
@@ -47,6 +48,7 @@ class RowRepository:
                 order_index=row["order_index"],
                 is_terminated=bool(row["is_terminated"]),
                 terminated_at=row["terminated_at"],
+                terminated_column_id=row["terminated_column_id"],
             )
             for row in rows
         ]

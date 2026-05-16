@@ -33,6 +33,11 @@ class FilterService:
             return True
 
         row = self._find_row(project, row_id)
+        if filter_state.row_status == "terminated" and not row.is_terminated:
+            return False
+        if filter_state.row_status == "active" and row.is_terminated:
+            return False
+
         for criteria in filter_state.filters.values():
             if not criteria.is_active:
                 continue

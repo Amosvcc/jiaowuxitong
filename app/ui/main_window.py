@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QComboBox,
     QSizePolicy,
     QStatusBar,
     QToolBar,
@@ -133,6 +134,16 @@ class MainWindow(QMainWindow):
         self.action_add_column = self._create_action("新增列")
         self.action_delete = self._create_action("删除")
         self.search_bar = SearchBar(self)
+        self.row_status_filter_combo = QComboBox(self)
+        self.row_status_filter_combo.addItem("全部行", "all")
+        self.row_status_filter_combo.addItem("已终止", "terminated")
+        self.row_status_filter_combo.addItem("未终止", "active")
+        self.row_status_filter_combo.setToolTip("按行终止状态筛选")
+        self.row_status_filter_combo.setMinimumWidth(110)
+
+        toolbar.addWidget(QLabel("行状态", self))
+        toolbar.addWidget(self.row_status_filter_combo)
+        toolbar.addSeparator()
 
         for action in (
             self.action_new,
@@ -206,10 +217,12 @@ class MainWindow(QMainWindow):
         self.search_bar.previous_requested.connect(self._go_to_previous_match)
         self.search_bar.next_requested.connect(self._go_to_next_match)
         self.search_bar.clear_requested.connect(self._clear_search)
+        self.row_status_filter_combo.currentIndexChanged.connect(self._set_row_status_filter)
 
-    def _create_action(self, text: str, *, enabled: bool = True) -> QAction:
+    def _create_action(self, text: str, *, enabled: bool = True, checkable: bool = False) -> QAction:
         action = QAction(text, self)
         action.setEnabled(enabled)
+        action.setCheckable(checkable)
         return action
 
     def _new_project(self) -> None:
@@ -218,6 +231,7 @@ class MainWindow(QMainWindow):
 
         project = self.project_service.create_project()
         self.table_model.load_project(project)
+        self.row_status_filter_combo.setCurrentIndex(0)
         self._clear_undo_history()
         self.search_bar.clear()
         self.search_bar.set_navigation_enabled(False)
@@ -248,6 +262,8 @@ class MainWindow(QMainWindow):
             return
 
         self.table_model.load_project(project)
+        self.row_status_filter_combo.setCurrentIndex(0)
+        self._apply_table_view_settings(project)
         self._clear_undo_history()
         self.search_bar.clear()
         self.search_bar.set_navigation_enabled(False)
@@ -273,6 +289,7 @@ class MainWindow(QMainWindow):
         return self._save_project_to_path(file_path)
 
     def _save_project_to_path(self, file_path: str) -> bool:
+        self.table_model.project.view_settings = self._collect_table_view_settings()
         try:
             saved_path = self.project_service.save_project(self.table_model.project, file_path)
         except Exception as exc:
@@ -302,6 +319,7 @@ class MainWindow(QMainWindow):
 
         project.dirty = True
         self.table_model.load_project(project)
+        self.row_status_filter_combo.setCurrentIndex(0)
         self._clear_undo_history()
         self.search_bar.clear()
         self.search_bar.set_navigation_enabled(False)
@@ -447,6 +465,20 @@ class MainWindow(QMainWindow):
             return None
         return current_index.column()
 
+    def _current_source_row_index(self) -> int | None:
+        current_index = self.table_view.currentIndex()
+        if not current_index.isValid():
+            return None
+        source_index = self.table_model.mapToSource(current_index)
+        return source_index.row() if source_index.isValid() else None
+
+    def _current_source_column_index(self) -> int | None:
+        current_index = self.table_view.currentIndex()
+        if not current_index.isValid():
+            return None
+        source_index = self.table_model.mapToSource(current_index)
+        return source_index.column() if source_index.isValid() else None
+
     def _add_row_after_selection(self) -> None:
         self.table_model.add_empty_row(self._selected_source_row_index_for_insert())
         self._perform_search(self.search_bar.keyword())
@@ -513,10 +545,18 @@ class MainWindow(QMainWindow):
     def _terminate_selected_rows(self) -> None:
         row_indexes = self._selected_row_indexes()
         if not row_indexes:
+            current_row_index = self._current_source_row_index()
+            if current_row_index is not None:
+                row_indexes = [current_row_index]
+        if not row_indexes:
             QMessageBox.information(self, "终止行", "请先选择行。")
             return
         self._push_undo_snapshot()
-        affected_rows = self.row_service.terminate_rows(self.table_model.project, row_indexes)
+        affected_rows = self.row_service.terminate_rows(
+            self.table_model.project,
+            row_indexes,
+            terminated_column_index=self._current_source_column_index(),
+        )
         if affected_rows == 0:
             return
         self.table_model.refresh_rows(row_indexes)
@@ -578,8 +618,14 @@ class MainWindow(QMainWindow):
 
     def _clear_all_filters(self) -> None:
         self.table_model.clear_filters()
+        self.row_status_filter_combo.setCurrentIndex(0)
         self._after_filter_changed()
         self.statusBar().showMessage("已清除全部筛选", 5000)
+
+    def _set_row_status_filter(self) -> None:
+        row_status = self.row_status_filter_combo.currentData()
+        self.table_model.set_row_status_filter(str(row_status or "all"))
+        self._after_filter_changed()
 
     def _after_filter_changed(self) -> None:
         self._perform_search(self.search_bar.keyword())
@@ -629,6 +675,7 @@ class MainWindow(QMainWindow):
         if project is None:
             return
         self.table_model.load_project(project)
+        self.row_status_filter_combo.setCurrentIndex(0)
         self.table_model.refresh_filter()
         self._perform_search(self.search_bar.keyword())
         self._update_status_labels()
@@ -754,6 +801,27 @@ class MainWindow(QMainWindow):
         project_label = Path(project.file_path).name if project.file_path else project.name
         dirty_suffix = " *" if project.dirty else ""
         self.setWindowTitle(f"ZY专用 V1.0 - {project_label}{dirty_suffix}")
+
+    def _collect_table_view_settings(self) -> dict[str, object]:
+        column_widths: dict[str, int] = {}
+        for column_index, column in enumerate(self.source_table_model.columns):
+            column_widths[str(column.id)] = self.table_view.columnWidth(column_index)
+        return {"column_widths": column_widths}
+
+    def _apply_table_view_settings(self, project) -> None:
+        settings = project.view_settings if isinstance(project.view_settings, dict) else {}
+        raw_widths = settings.get("column_widths", {})
+        if not isinstance(raw_widths, dict):
+            return
+        width_by_column_id = {
+            str(column_id): width
+            for column_id, width in raw_widths.items()
+            if isinstance(width, int) and width > 0
+        }
+        for column_index, column in enumerate(self.source_table_model.columns):
+            width = width_by_column_id.get(str(column.id))
+            if width is not None:
+                self.table_view.setColumnWidth(column_index, width)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._confirm_save_if_needed():

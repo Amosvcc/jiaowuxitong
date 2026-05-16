@@ -25,6 +25,7 @@ class Project:
     columns: list[Column] = field(default_factory=list)
     rows: list[Row] = field(default_factory=list)
     cells: dict[tuple[int, int], Cell] = field(default_factory=dict)
+    view_settings: dict[str, object] = field(default_factory=dict)
 
     @classmethod
     def create_empty(

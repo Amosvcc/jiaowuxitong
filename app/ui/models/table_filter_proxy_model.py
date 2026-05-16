@@ -116,6 +116,15 @@ class TableFilterProxyModel(QSortFilterProxyModel):
         if column_index >= 0:
             self.headerDataChanged.emit(Qt.Orientation.Horizontal, column_index, column_index)
 
+    def set_terminated_only_filter(self, enabled: bool) -> None:
+        self.set_row_status_filter("terminated" if enabled else "all")
+
+    def set_row_status_filter(self, row_status: str) -> None:
+        if row_status not in {"all", "terminated", "active"}:
+            raise ValueError("不支持的行状态筛选")
+        self.filter_state.row_status = row_status
+        self._invalidate_rows_filter()
+
     def clear_filters(self) -> None:
         self.filter_state = TableFilterState()
         self._invalidate_rows_filter()

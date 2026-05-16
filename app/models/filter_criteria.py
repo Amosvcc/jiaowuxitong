@@ -17,7 +17,8 @@ class ColumnFilterCriteria:
 @dataclass
 class TableFilterState:
     filters: dict[str, ColumnFilterCriteria] = field(default_factory=dict)
+    row_status: str = "all"
 
     @property
     def is_active(self) -> bool:
-        return any(criteria.is_active for criteria in self.filters.values())
+        return self.row_status != "all" or any(criteria.is_active for criteria in self.filters.values())

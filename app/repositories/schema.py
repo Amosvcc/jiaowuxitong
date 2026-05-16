@@ -23,8 +23,10 @@ CREATE TABLE IF NOT EXISTS rows (
     order_index INTEGER NOT NULL,
     is_terminated INTEGER NOT NULL DEFAULT 0,
     terminated_at TEXT,
+    terminated_column_id INTEGER,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(terminated_column_id) REFERENCES columns(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS cells (

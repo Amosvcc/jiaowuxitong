@@ -41,6 +41,9 @@ def test_main_window_initial_state() -> None:
         assert window.action_column_settings.isEnabled()
         assert window.action_terminate_row.isEnabled()
         assert window.action_restore_row.isEnabled()
+        assert window.row_status_filter_combo.currentData() == "all"
+        assert window.row_status_filter_combo.itemText(1) == "已终止"
+        assert window.row_status_filter_combo.itemText(2) == "未终止"
         assert window.action_statistics.isEnabled()
         assert window.action_pivot.isEnabled()
         assert isinstance(window.search_bar, SearchBar)
@@ -124,6 +127,7 @@ def test_main_window_adds_column_after_current_selection() -> None:
 def test_main_window_can_terminate_selected_rows() -> None:
     app = get_qapp()
     window = MainWindow()
+    window.table_view.setCurrentIndex(window.table_model.index(1, 0))
     window.table_view.selectRow(1)
 
     try:
@@ -131,9 +135,53 @@ def test_main_window_can_terminate_selected_rows() -> None:
         app.processEvents()
 
         assert window.table_model.rows[1].is_terminated is True
+        assert window.table_model.rows[1].terminated_column_id == window.table_model.columns[0].id
         assert window.table_model.project.dirty is True
     finally:
         window.table_model.mark_clean()
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_can_terminate_current_cell_without_row_selection() -> None:
+    app = get_qapp()
+    window = MainWindow()
+    window.table_view.setCurrentIndex(window.table_model.index(2, 1))
+
+    try:
+        window._terminate_selected_rows()
+        app.processEvents()
+
+        assert window.table_model.rows[2].is_terminated is True
+        assert window.table_model.rows[2].terminated_column_id == window.table_model.columns[1].id
+    finally:
+        window.table_model.mark_clean()
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_can_filter_rows_by_terminated_status() -> None:
+    app = get_qapp()
+    window = MainWindow()
+    window.table_model.project.rows[0].is_terminated = True
+    window.table_model.project.rows[2].is_terminated = True
+
+    try:
+        window.row_status_filter_combo.setCurrentIndex(1)
+        app.processEvents()
+
+        assert window.table_model.rowCount() == 2
+        assert window.filter_status_label.text() == "已筛选：显示 2 / 10 行"
+
+        window.row_status_filter_combo.setCurrentIndex(2)
+        app.processEvents()
+        assert window.table_model.rowCount() == 8
+
+        window._clear_all_filters()
+        app.processEvents()
+        assert window.table_model.rowCount() == 10
+        assert window.row_status_filter_combo.currentData() == "all"
+    finally:
         window.close()
         app.processEvents()
 
@@ -588,6 +636,62 @@ def test_main_window_pivot_does_not_change_dirty(monkeypatch) -> None:
 
         assert window.table_model.project.dirty is False
         assert not window.windowTitle().endswith("*")
+    finally:
+        window.close()
+        app.processEvents()
+
+def test_main_window_save_project_collects_column_widths(monkeypatch, workspace_tmp_path) -> None:
+    app = get_qapp()
+    window = MainWindow()
+    captured = {"settings": None}
+
+    monkeypatch.setattr(
+        QFileDialog,
+        "getSaveFileName",
+        lambda *args, **kwargs: (str(workspace_tmp_path / "layout.dasproj"), ""),
+    )
+
+    def fake_save(project, path):
+        captured["settings"] = project.view_settings
+        return str(workspace_tmp_path / "layout.dasproj")
+
+    monkeypatch.setattr(window.project_service, "save_project", fake_save)
+
+    try:
+        window.table_view.setColumnWidth(0, 260)
+        window.table_view.setColumnWidth(1, 180)
+
+        ok = window._save_project_as()
+        app.processEvents()
+
+        assert ok is True
+        assert captured["settings"] is not None
+        assert captured["settings"]["column_widths"]["1"] == 260
+        assert captured["settings"]["column_widths"]["2"] == 180
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_open_project_applies_saved_column_widths(monkeypatch, workspace_tmp_path) -> None:
+    app = get_qapp()
+    window = MainWindow()
+    project = Project.create_empty(row_count=2, column_count=2)
+    project.view_settings = {"column_widths": {"1": 240, "2": 320}}
+
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *args, **kwargs: (str(workspace_tmp_path / "layout.dasproj"), ""),
+    )
+    monkeypatch.setattr(window.project_service, "open_project", lambda path: project)
+
+    try:
+        window._open_project()
+        app.processEvents()
+
+        assert window.table_view.columnWidth(0) == 240
+        assert window.table_view.columnWidth(1) == 320
     finally:
         window.close()
         app.processEvents()

@@ -204,6 +204,21 @@ def test_table_model_terminated_row_has_background() -> None:
     assert isinstance(model.data(model.index(0, 0), Qt.ItemDataRole.BackgroundRole), QBrush)
 
 
+def test_table_model_terminated_cell_has_red_background() -> None:
+    project = Project.create_empty(row_count=1, column_count=2)
+    project.rows[0].is_terminated = True
+    project.rows[0].terminated_column_id = project.columns[1].id
+    model = DataTableModel(project)
+
+    terminated_cell_brush = model.data(model.index(0, 1), Qt.ItemDataRole.BackgroundRole)
+    row_brush = model.data(model.index(0, 0), Qt.ItemDataRole.BackgroundRole)
+
+    assert isinstance(terminated_cell_brush, QBrush)
+    assert terminated_cell_brush.color().name().lower() == "#ff5252"
+    assert isinstance(row_brush, QBrush)
+    assert row_brush.color().name().lower() == "#e0e0e0"
+
+
 def test_table_model_search_highlight_has_priority_over_terminated_background() -> None:
     project = Project.create_empty(row_count=1, column_count=1)
     project.rows[0].is_terminated = True

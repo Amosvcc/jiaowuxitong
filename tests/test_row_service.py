@@ -13,6 +13,15 @@ def test_row_service_terminates_single_row() -> None:
     assert project.dirty is True
 
 
+def test_row_service_stores_terminated_column() -> None:
+    project = Project.create_empty(row_count=1, column_count=2)
+
+    affected_rows = RowService().terminate_rows(project, [0], terminated_column_index=1)
+
+    assert affected_rows == 1
+    assert project.rows[0].terminated_column_id == project.columns[1].id
+
+
 def test_row_service_restores_single_row() -> None:
     project = Project.create_empty(row_count=1, column_count=1)
     project.rows[0].is_terminated = True
@@ -24,6 +33,7 @@ def test_row_service_restores_single_row() -> None:
     assert affected_rows == 1
     assert project.rows[0].is_terminated is False
     assert project.rows[0].terminated_at is None
+    assert project.rows[0].terminated_column_id is None
     assert project.dirty is True
 
 

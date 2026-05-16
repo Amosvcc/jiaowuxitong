@@ -26,6 +26,9 @@ class ColumnService:
             for key, cell in project.cells.items()
             if key[1] not in deleted_column_ids
         }
+        for row in project.rows:
+            if row.terminated_column_id in deleted_column_ids:
+                row.terminated_column_id = None
         for order_index, column in enumerate(project.columns):
             column.order_index = order_index
 

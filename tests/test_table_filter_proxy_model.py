@@ -75,6 +75,30 @@ def test_proxy_clear_filters_restores_all_rows() -> None:
     assert proxy_model.rowCount() == 4
 
 
+def test_proxy_can_filter_terminated_rows() -> None:
+    project, _source_model, proxy_model = make_model()
+    project.rows[1].is_terminated = True
+    project.rows[3].is_terminated = True
+
+    proxy_model.set_row_status_filter("terminated")
+
+    assert proxy_model.rowCount() == 2
+    assert proxy_model.mapToSource(proxy_model.index(0, 0)).row() == 1
+    assert proxy_model.mapToSource(proxy_model.index(1, 0)).row() == 3
+
+
+def test_proxy_can_filter_active_rows() -> None:
+    project, _source_model, proxy_model = make_model()
+    project.rows[1].is_terminated = True
+    project.rows[3].is_terminated = True
+
+    proxy_model.set_row_status_filter("active")
+
+    assert proxy_model.rowCount() == 2
+    assert proxy_model.mapToSource(proxy_model.index(0, 0)).row() == 0
+    assert proxy_model.mapToSource(proxy_model.index(1, 0)).row() == 2
+
+
 def test_proxy_empty_result_has_zero_rows() -> None:
     project, _source_model, proxy_model = make_model()
 

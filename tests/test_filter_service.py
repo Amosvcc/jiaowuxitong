@@ -99,6 +99,26 @@ def test_no_filter_matches_all_rows() -> None:
     }
 
 
+def test_row_status_filter_matches_terminated_rows() -> None:
+    project = make_project()
+    project.rows[1].is_terminated = True
+    project.rows[3].is_terminated = True
+
+    state = TableFilterState(row_status="terminated")
+
+    assert FilterService().get_matching_row_ids(project, state) == {"2", "4"}
+
+
+def test_row_status_filter_matches_active_rows() -> None:
+    project = make_project()
+    project.rows[1].is_terminated = True
+    project.rows[3].is_terminated = True
+
+    state = TableFilterState(row_status="active")
+
+    assert FilterService().get_matching_row_ids(project, state) == {"1", "3", "5"}
+
+
 def test_blank_value_filter_matches_blank_rows() -> None:
     project = make_project()
     state = TableFilterState(

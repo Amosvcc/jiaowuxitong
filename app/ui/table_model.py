@@ -25,6 +25,7 @@ class DataTableModel(QAbstractTableModel):
         self._current_search_brush = QBrush(QColor("#ffcc80"))
         self._current_search_foreground_brush = QBrush(QColor("#e65100"))
         self._terminated_row_brush = QBrush(QColor("#e0e0e0"))
+        self._terminated_cell_brush = QBrush(QColor("#ff5252"))
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         if parent.isValid():
@@ -51,6 +52,9 @@ class DataTableModel(QAbstractTableModel):
                 ):
                     return self._current_search_brush
                 return self._search_brush
+            column = self.columns[index.column()]
+            if row.is_terminated and row.terminated_column_id == column.id:
+                return self._terminated_cell_brush
             if row.is_terminated:
                 return self._terminated_row_brush
 

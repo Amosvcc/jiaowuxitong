@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 from pathlib import Path
 
 from app.models import Project
@@ -37,6 +38,7 @@ class ProjectRepository:
                     """,
                     (project.name, project.created_at, project.updated_at, project.app_version),
                 )
+                self._save_app_settings(connection, project.view_settings)
         finally:
             connection.close()
 
@@ -60,7 +62,27 @@ class ProjectRepository:
                 columns=self.column_repository.load_all(connection),
                 rows=self.row_repository.load_all(connection),
                 cells=self.cell_repository.load_all(connection),
+                view_settings=self._load_app_settings(connection),
             )
             return project
         finally:
             connection.close()
+
+    @staticmethod
+    def _save_app_settings(connection: sqlite3.Connection, settings: dict[str, object]) -> None:
+        for key, value in settings.items():
+            connection.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?)",
+                (key, json.dumps(value, ensure_ascii=False)),
+            )
+
+    @staticmethod
+    def _load_app_settings(connection: sqlite3.Connection) -> dict[str, object]:
+        rows = connection.execute("SELECT key, value FROM app_settings").fetchall()
+        settings: dict[str, object] = {}
+        for row in rows:
+            try:
+                settings[row["key"]] = json.loads(row["value"])
+            except json.JSONDecodeError:
+                settings[row["key"]] = row["value"]
+        return settings

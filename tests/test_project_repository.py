@@ -28,6 +28,7 @@ def test_project_repository_saves_and_loads_full_project_data(workspace_tmp_path
     project.columns[1].name = "状态"
     project.rows[1].is_terminated = True
     project.rows[1].terminated_at = "2026-05-13T10:00:00"
+    project.rows[1].terminated_column_id = project.columns[1].id
     project.set_cell_value(1, 1, "张三")
     project.set_cell_value(1, 2, "进行中")
     project.set_cell_value(2, 1, "李四")
@@ -43,5 +44,17 @@ def test_project_repository_saves_and_loads_full_project_data(workspace_tmp_path
     assert loaded.columns[0].allow_custom_value is False
     assert loaded.rows[1].is_terminated is True
     assert loaded.rows[1].terminated_at == "2026-05-13T10:00:00"
+    assert loaded.rows[1].terminated_column_id == loaded.columns[1].id
     assert loaded.get_cell_value(1, 1) == "张三"
     assert loaded.get_cell_value(2, 2) == "已完成"
+
+def test_project_repository_saves_and_loads_view_settings(workspace_tmp_path) -> None:
+    path = workspace_tmp_path / "view_settings.dasproj"
+    repository = ProjectRepository()
+    project = Project.create_empty(row_count=1, column_count=2)
+    project.view_settings = {"column_widths": {"1": 220, "2": 360}}
+
+    repository.save(str(path), project)
+    loaded = repository.load(str(path))
+
+    assert loaded.view_settings == {"column_widths": {"1": 220, "2": 360}}
