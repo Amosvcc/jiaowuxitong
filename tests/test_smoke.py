@@ -15,7 +15,7 @@ def test_main_window_smoke() -> None:
     window = MainWindow()
 
     try:
-        assert window.windowTitle().startswith("数据分析软件 V1.0")
+        assert window.windowTitle().startswith("ZY专用 V1.0")
         assert window.table_model is not None
         assert window.table_view is not None
     finally:

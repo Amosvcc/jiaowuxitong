@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.core import last_file_dialog_dir, remember_file_dialog_path
 from app.services import (
     ColumnService,
     DataUpdateService,
@@ -247,11 +248,12 @@ class MainWindow(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "打开项目",
-            "",
+            last_file_dialog_dir(),
             "Data Analysis Project (*.dasproj)",
         )
         if not file_path:
             return
+        remember_file_dialog_path(file_path)
 
         current_project = self.table_model.project
         try:
@@ -281,11 +283,12 @@ class MainWindow(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "另存为项目",
-            self.table_model.project.file_path or "",
+            self.table_model.project.file_path or last_file_dialog_dir(),
             "Data Analysis Project (*.dasproj)",
         )
         if not file_path:
             return False
+        remember_file_dialog_path(file_path)
         return self._save_project_to_path(file_path)
 
     def _save_project_to_path(self, file_path: str) -> bool:
@@ -305,11 +308,12 @@ class MainWindow(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "选择导入文件",
-            "",
+            last_file_dialog_dir(),
             "数据文件 (*.csv *.xlsx);;CSV 文件 (*.csv);;Excel 文件 (*.xlsx)",
         )
         if not file_path:
             return
+        remember_file_dialog_path(file_path)
 
         try:
             project = self.import_export_service.import_file(file_path)
@@ -335,7 +339,7 @@ class MainWindow(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "导出表格",
-            "",
+            last_file_dialog_dir(),
             "CSV 文件 (*.csv);;Excel 文件 (*.xlsx)",
         )
         if not file_path:
@@ -343,6 +347,7 @@ class MainWindow(QMainWindow):
 
         if not Path(file_path).suffix:
             file_path = f"{file_path}.csv"
+        remember_file_dialog_path(file_path)
 
         try:
             self.import_export_service.export_file(self.table_model.project, file_path)

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from app.core import last_file_dialog_dir, remember_file_dialog_path
 from app.models import Project, StatisticsItem
 from app.services import StatisticsService
 
@@ -129,7 +130,7 @@ class StatisticsDialog(QDialog):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "导出统计结果",
-            "",
+            last_file_dialog_dir(),
             "CSV 文件 (*.csv);;Excel 文件 (*.xlsx)",
         )
         if not file_path:
@@ -137,6 +138,7 @@ class StatisticsDialog(QDialog):
 
         if not Path(file_path).suffix:
             file_path = f"{file_path}.csv"
+        remember_file_dialog_path(file_path)
 
         try:
             self.statistics_service.export_statistics(

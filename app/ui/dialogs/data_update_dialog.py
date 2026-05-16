@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import DuplicateMatchKeyError
+from app.core import DuplicateMatchKeyError, last_file_dialog_dir, remember_file_dialog_path
 from app.models import DataUpdateResult, Project
 from app.services import DataUpdateService, ImportExportService
 from app.ui.dialogs.data_update_detail_dialog import DataUpdateDetailDialog
@@ -125,11 +125,12 @@ class DataUpdateDialog(QDialog):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "选择更新文件",
-            "",
+            last_file_dialog_dir(),
             "数据文件 (*.csv *.xlsx);;CSV 文件 (*.csv);;Excel 文件 (*.xlsx)",
         )
         if not file_path:
             return
+        remember_file_dialog_path(file_path)
         self.load_source_file(file_path)
 
     def load_source_file(self, file_path: str) -> None:

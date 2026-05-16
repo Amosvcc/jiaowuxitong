@@ -20,7 +20,7 @@ def test_main_window_initial_state() -> None:
     window = MainWindow()
 
     try:
-        assert window.windowTitle() == "数据分析软件 V1.0 - 未命名项目"
+        assert window.windowTitle() == "ZY专用 V1.0 - 未命名项目"
         assert window.size().width() == 1200
         assert window.size().height() == 800
         assert isinstance(window.table_view, DataTableView)
@@ -534,6 +534,36 @@ def test_main_window_open_failure_keeps_existing_model(monkeypatch, workspace_tm
 
         assert window.table_model.project is original_project
         assert errors == [("打开失败", "打开失败测试")]
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_open_project_uses_and_updates_last_file_dialog_dir(
+    monkeypatch, workspace_tmp_path
+) -> None:
+    app = get_qapp()
+    window = MainWindow()
+    opened_dirs: list[str] = []
+    remembered_paths: list[str] = []
+    selected_path = workspace_tmp_path / "demo.dasproj"
+    project = Project.create_empty(row_count=1, column_count=1)
+
+    def fake_open_file_name(parent, title, directory, file_filter):
+        opened_dirs.append(directory)
+        return str(selected_path), ""
+
+    monkeypatch.setattr("app.ui.main_window.last_file_dialog_dir", lambda: str(workspace_tmp_path))
+    monkeypatch.setattr("app.ui.main_window.remember_file_dialog_path", remembered_paths.append)
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", fake_open_file_name)
+    monkeypatch.setattr(window.project_service, "open_project", lambda path: project)
+
+    try:
+        window._open_project()
+        app.processEvents()
+
+        assert opened_dirs == [str(workspace_tmp_path)]
+        assert remembered_paths == [str(selected_path)]
     finally:
         window.close()
         app.processEvents()

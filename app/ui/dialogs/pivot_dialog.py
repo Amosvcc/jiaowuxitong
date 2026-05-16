@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from app.core import last_file_dialog_dir, remember_file_dialog_path
 from app.models import PivotResult, Project
 from app.services import ImportExportService, PivotService
 from app.ui.models import PivotTableModel
@@ -153,13 +154,14 @@ class PivotDialog(QDialog):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "导出数据透视结果",
-            "",
+            last_file_dialog_dir(),
             "CSV 文件 (*.csv);;Excel 文件 (*.xlsx)",
         )
         if not file_path:
             return
         if not Path(file_path).suffix:
             file_path = f"{file_path}.csv"
+        remember_file_dialog_path(file_path)
 
         try:
             self.import_export_service.export_pivot_result(self.current_result, file_path)
