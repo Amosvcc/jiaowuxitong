@@ -155,12 +155,12 @@ class PivotDialog(QDialog):
             self,
             "导出数据透视结果",
             last_file_dialog_dir(),
-            "CSV 文件 (*.csv);;Excel 文件 (*.xlsx)",
+            "Excel 文件 (*.xlsx);;CSV 文件 (*.csv)",
         )
         if not file_path:
             return
         if not Path(file_path).suffix:
-            file_path = f"{file_path}.csv"
+            file_path = f"{file_path}.xlsx"
         remember_file_dialog_path(file_path)
 
         try:
